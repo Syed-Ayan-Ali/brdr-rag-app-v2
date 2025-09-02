@@ -1,0 +1,559 @@
+import { BRDRCrawler, CrawledDocument } from '../../crawler/BRDRCrawler';
+import { markdownPageChunker, ProcessedDocument, PageChunk } from '../chunking/MarkdownPageChunker';
+import { embeddingService } from '../embeddings/EmbeddingService';
+import { supabaseService, DatabaseDocument, DatabaseChunk } from '../database/SupabaseService';
+import { logger, LogCategory } from '../logging/Logger';
+import { v4 as uuidv4 } from 'uuid';
+
+export interface ETLOptions {
+  maxDocuments?: number;
+  batchSize?: number;
+  databaseBatchSize?: number; // Upload to database every N documents
+  skipExisting?: boolean;
+  generateEmbeddings?: boolean;
+  chunkingOptions?: {
+    maxTokens?: number;
+    overlap?: number;
+    hierarchyLevels?: number;
+  };
+}
+
+export interface ETLProgress {
+  phase: 'crawling' | 'chunking' | 'embedding' | 'storing' | 'complete' | 'error';
+  documentsProcessed: number;
+  totalDocuments: number;
+  chunksCreated: number;
+  embeddingsGenerated: number;
+  currentDocument?: string;
+  error?: string;
+  startTime: Date;
+  endTime?: Date;
+}
+
+export interface ETLResult {
+  success: boolean;
+  documentsProcessed: number;
+  chunksCreated: number;
+  embeddingsGenerated: number;
+  errors: string[];
+  processingTime: number;
+  progress: ETLProgress;
+}
+
+export class ETLPipeline {
+  private brdrCrawler: BRDRCrawler;
+  private progress: ETLProgress;
+  private errors: string[] = [];
+
+  constructor() {
+    this.brdrCrawler = new BRDRCrawler();
+    
+    this.progress = {
+      phase: 'crawling',
+      documentsProcessed: 0,
+      totalDocuments: 0,
+      chunksCreated: 0,
+      embeddingsGenerated: 0,
+      startTime: new Date()
+    };
+  }
+
+  async runFullPipeline(options: ETLOptions = {}): Promise<ETLResult> {
+    const startTime = Date.now();
+    this.progress.startTime = new Date();
+    this.errors = [];
+
+    logger.info(LogCategory.ETL, 'Starting ETL pipeline', options);
+
+    try {
+      // Test database connection first
+      const isConnected = await supabaseService.testConnection();
+      if (!isConnected) {
+        throw new Error('Database connection failed');
+      }
+
+      // Phase 1: Crawl metadata from BRDR API
+      this.progress.phase = 'crawling';
+      logger.info(LogCategory.ETL, 'Phase 1: Crawling metadata from BRDR API');
+      
+      const apiDocuments = await this.crawlApiDocuments(options);
+      this.progress.totalDocuments = apiDocuments.length;
+      
+      if (apiDocuments.length === 0) {
+        logger.warn(LogCategory.ETL, 'No documents found in BRDR API');
+        return this.createResult(true, startTime);
+      }
+
+      // Phase 2: Match with markdown files and process
+      await this.processHybridBatch(apiDocuments, options);
+
+      this.progress.phase = 'complete';
+      this.progress.endTime = new Date();
+      
+      logger.info(LogCategory.ETL, 'ETL pipeline completed successfully', {
+        documentsProcessed: this.progress.documentsProcessed,
+        chunksCreated: this.progress.chunksCreated,
+        embeddingsGenerated: this.progress.embeddingsGenerated,
+        processingTime: Date.now() - startTime
+      });
+
+      return this.createResult(true, startTime);
+
+    } catch (error) {
+      this.progress.phase = 'error';
+      this.progress.error = error instanceof Error ? error.message : 'Unknown error';
+      this.progress.endTime = new Date();
+      
+      logger.error(LogCategory.ETL, 'ETL pipeline failed', error);
+      this.errors.push(this.progress.error);
+      
+      return this.createResult(false, startTime);
+    }
+  }
+
+  private async crawlApiDocuments(options: ETLOptions): Promise<CrawledDocument[]> {
+    logger.info(LogCategory.ETL, 'Starting BRDR API document crawling for metadata');
+    
+    // Calculate pages needed to get all documents or respect maxDocuments limit
+    const maxPages = options.maxDocuments ? Math.ceil(options.maxDocuments / 20) : 999; // Use 999 to get all available pages
+    
+    const documents = await this.brdrCrawler.crawlDocuments({
+      maxPages: maxPages,
+      includePDFContent: false, // We'll use markdown for content
+      filterExisting: options.skipExisting || true
+    });
+
+    logger.info(LogCategory.ETL, `Successfully crawled ${documents.length} documents from BRDR API`);
+
+    if (options.maxDocuments && documents.length > options.maxDocuments) {
+      logger.info(LogCategory.ETL, `Limiting to ${options.maxDocuments} documents as requested`);
+      return documents.slice(0, options.maxDocuments);
+    }
+
+    return documents;
+  }
+
+  private async processHybridBatch(apiDocuments: CrawledDocument[], options: ETLOptions): Promise<void> {
+    const processingBatchSize = options.batchSize || 10;
+    const databaseBatchSize = options.databaseBatchSize || 50; // Upload to database every N documents
+    const processedDocuments: { apiDoc: CrawledDocument; markdownDoc?: ProcessedDocument; chunks?: ProcessedChunk[] }[] = [];
+    
+    logger.info(LogCategory.ETL, `Starting hybrid batch processing with database batching every ${databaseBatchSize} documents`);
+    
+    for (let i = 0; i < apiDocuments.length; i += processingBatchSize) {
+      const batch = apiDocuments.slice(i, Math.min(i + processingBatchSize, apiDocuments.length));
+      
+      logger.info(LogCategory.ETL, `Processing hybrid batch ${Math.floor(i / processingBatchSize) + 1}`, {
+        batchSize: batch.length,
+        startIndex: i,
+        endIndex: Math.min(i + processingBatchSize, apiDocuments.length)
+      });
+
+      // Process documents in parallel but don't store to database yet
+      const batchResults = await Promise.all(batch.map(async (doc) => {
+        const result = await this.processHybridDocumentInMemory(doc, options);
+        return { apiDoc: doc, ...result };
+      }));
+      
+      // Add to processed documents array
+      processedDocuments.push(...batchResults);
+      
+      // Check if we should upload to database
+      if (processedDocuments.length >= databaseBatchSize || i + processingBatchSize >= apiDocuments.length) {
+        const memoryBefore = process.memoryUsage();
+        logger.info(LogCategory.ETL, `Uploading batch of ${processedDocuments.length} documents to database...`, {
+          memoryUsage: `${Math.round(memoryBefore.heapUsed / 1024 / 1024)}MB`
+        });
+        
+        await this.uploadBatchToDatabase(processedDocuments, options);
+        
+        // Clear the processed documents array to free memory
+        processedDocuments.length = 0;
+        
+        // Force garbage collection hint
+        if (global.gc) {
+          global.gc();
+        }
+        
+        const memoryAfter = process.memoryUsage();
+        logger.info(LogCategory.ETL, `Batch upload completed. Memory freed: ${Math.round((memoryBefore.heapUsed - memoryAfter.heapUsed) / 1024 / 1024)}MB`);
+      }
+    }
+  }
+
+  private async processHybridDocumentInMemory(apiDocument: CrawledDocument, options: ETLOptions): Promise<{ markdownDoc?: ProcessedDocument; chunks?: ProcessedChunk[] }> {
+    try {
+      this.progress.currentDocument = apiDocument.doc_id;
+      logger.info(LogCategory.ETL, `Processing hybrid document in memory: ${apiDocument.doc_id}`);
+
+      // Check if document already exists
+      if (options.skipExisting) {
+        const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
+        if (existing) {
+          logger.info(LogCategory.ETL, `Skipping existing document: ${apiDocument.doc_id}`);
+          this.progress.documentsSkipped++;
+          return {};
+        }
+      }
+
+      // Phase 2: Find matching markdown file and chunk it
+      const markdownDoc = await this.findAndProcessMarkdownFile(apiDocument.doc_id);
+
+      if (!markdownDoc) {
+        logger.info(LogCategory.ETL, `No markdown file found for document: ${apiDocument.doc_id}`);
+        return { markdownDoc: undefined, chunks: undefined }; // Return empty result for metadata-only
+      }
+
+      const chunks = markdownDoc.chunks;
+
+      // Phase 3: Generate embeddings
+      const chunksWithEmbeddings = await this.generateEmbeddings(chunks, options);
+
+      return { markdownDoc, chunks: chunksWithEmbeddings };
+
+    } catch (error) {
+      logger.error(LogCategory.ETL, `Error processing hybrid document in memory: ${apiDocument.doc_id}`, error);
+      this.progress.errors.push(`Document ${apiDocument.doc_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return {};
+    }
+  }
+
+  private async uploadBatchToDatabase(processedDocuments: { apiDoc: CrawledDocument; markdownDoc?: ProcessedDocument; chunks?: ProcessedChunk[] }[], options: ETLOptions): Promise<void> {
+    logger.info(LogCategory.ETL, `Uploading batch of ${processedDocuments.length} documents to database`);
+    
+    for (const { apiDoc, markdownDoc, chunks } of processedDocuments) {
+      try {
+        if (markdownDoc && chunks) {
+          // Store hybrid document (API metadata + markdown content)
+          await this.storeHybridDocument(apiDoc, markdownDoc, chunks);
+        } else {
+          // Store metadata-only document
+          await this.storeMetadataOnly(apiDoc);
+        }
+        
+        this.progress.documentsProcessed++;
+        
+      } catch (error) {
+        logger.error(LogCategory.ETL, `Error uploading document to database: ${apiDoc.doc_id}`, error);
+        if (this.progress.errors) {
+          this.progress.errors.push(`Database upload ${apiDoc.doc_id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
+    
+    logger.info(LogCategory.ETL, `Batch upload completed. Processed ${processedDocuments.length} documents`);
+  }
+
+  private async processHybridDocument(apiDocument: CrawledDocument, options: ETLOptions): Promise<void> {
+    try {
+      this.progress.currentDocument = apiDocument.doc_id;
+      logger.info(LogCategory.ETL, `Processing hybrid document: ${apiDocument.doc_id}`);
+
+      // Check if document already exists
+      if (options.skipExisting) {
+        const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
+        if (existing) {
+          logger.info(LogCategory.ETL, `Skipping existing document: ${apiDocument.doc_id}`);
+          this.progress.documentsProcessed++;
+          return;
+        }
+      }
+
+      // Phase 2: Find matching markdown file and chunk it
+      this.progress.phase = 'chunking';
+      const markdownDoc = await this.findAndProcessMarkdownFile(apiDocument.doc_id);
+      
+      if (!markdownDoc) {
+        logger.warn(LogCategory.ETL, `No markdown file found for document: ${apiDocument.doc_id}`);
+        // Store only metadata without chunks
+        await this.storeMetadataOnly(apiDocument);
+        this.progress.documentsProcessed++;
+        return;
+      }
+      
+      const chunks = markdownDoc.chunks;
+      
+      // Phase 3: Generate embeddings
+      this.progress.phase = 'embedding';
+      const chunksWithEmbeddings = await this.generateEmbeddings(chunks, options);
+      
+      // Phase 4: Store in database (metadata from API + chunks from markdown)
+      this.progress.phase = 'storing';
+      await this.storeHybridDocument(apiDocument, markdownDoc, chunksWithEmbeddings);
+      
+      this.progress.documentsProcessed++;
+      
+      logger.info(LogCategory.ETL, `Successfully processed hybrid document: ${apiDocument.doc_id}`, {
+        chunksCreated: chunks.length,
+        embeddingsGenerated: chunksWithEmbeddings.filter(c => (c as any).embedding).length
+      });
+
+    } catch (error) {
+      const errorMsg = `Failed to process hybrid document ${apiDocument.doc_id}: ${error}`;
+      logger.error(LogCategory.ETL, errorMsg, error);
+      this.errors.push(errorMsg);
+    }
+  }
+
+  private async findAndProcessMarkdownFile(docId: string): Promise<ProcessedDocument | null> {
+    try {
+      // Try to find markdown file with matching docId
+      const filename = `${docId}.md`;
+      const markdownDocument = markdownPageChunker.parseMarkdownFile(filename);
+      
+      if (!markdownDocument) {
+        return null;
+      }
+      
+      const processedDoc = markdownPageChunker.processDocument(markdownDocument);
+      this.progress.chunksCreated += processedDoc.chunks.length;
+      
+      logger.debug(LogCategory.CHUNKING, `Found and processed markdown file: ${filename} with ${processedDoc.chunks.length} pages`);
+      
+      return processedDoc;
+    } catch (error) {
+      logger.debug(LogCategory.CHUNKING, `No markdown file found for doc_id: ${docId}`);
+      return null;
+    }
+  }
+
+  private async generateEmbeddings(
+    chunks: PageChunk[],
+    options: ETLOptions
+  ): Promise<PageChunk[]> {
+    if (options.generateEmbeddings === false) {
+      return chunks;
+    }
+
+    logger.debug(LogCategory.EMBEDDING, `Generating embeddings for ${chunks.length} page chunks`);
+    
+    for (const chunk of chunks) {
+      try {
+        const embeddingResult = await embeddingService.generateEmbedding(chunk.cleanContent);
+        (chunk as any).embedding = embeddingResult.embedding;
+        this.progress.embeddingsGenerated++;
+      } catch (error) {
+        logger.error(LogCategory.EMBEDDING, `Failed to generate embedding for chunk: ${chunk.id}`, error);
+        // Continue processing other chunks
+      }
+    }
+
+    return chunks;
+  }
+
+  private async storeHybridDocument(
+    apiDocument: CrawledDocument,
+    markdownDoc: ProcessedDocument,
+    chunks: PageChunk[]
+  ): Promise<void> {
+    logger.debug(LogCategory.DATABASE, `Storing hybrid document: ${apiDocument.doc_id}`);
+
+    // Create database document using API metadata + markdown content
+    const dbDocument: DatabaseDocument = {
+      id: uuidv4(),
+      doc_id: apiDocument.doc_id,
+      content: markdownDoc.fullContent, // Use markdown content instead of API content
+      source: apiDocument.source,
+      embedding: (chunks[0] as any)?.embedding, // Use first page embedding for document
+      metadata: {
+        ...apiDocument.metadata,
+        markdownMetadata: markdownDoc.metadata
+      },
+      
+      // Rich metadata from API
+      doc_uuid: apiDocument.doc_uuid,
+      doc_type_code: apiDocument.doc_type_code,
+      doc_type_desc: apiDocument.doc_type_desc,
+      version_code: apiDocument.version_code,
+      doc_long_title: apiDocument.doc_long_title,
+      doc_desc: apiDocument.doc_desc,
+      issue_date: apiDocument.issue_date,
+      guideline_no: apiDocument.guideline_no,
+      supersession_date: apiDocument.supersession_date,
+      keywords: [...(apiDocument.metadata?.keywords || []), ...(markdownDoc.metadata.author ? [markdownDoc.metadata.author] : [])],
+      topics: apiDocument.topics || [],
+      concepts: apiDocument.concepts || [],
+      document_type: apiDocument.document_type,
+      language: apiDocument.language || 'en',
+      doc_topic_subtopic_list: apiDocument.doc_topic_subtopic_list,
+      doc_keyword_list: apiDocument.doc_keyword_list,
+      doc_ai_type_list: apiDocument.doc_ai_type_list,
+      doc_view_list: apiDocument.doc_view_list,
+      directly_related_doc_list: apiDocument.directly_related_doc_list,
+      version_history_doc_list: apiDocument.version_history_doc_list,
+      reference_doc_list: apiDocument.reference_doc_list,
+      superseded_doc_list: apiDocument.superseded_doc_list
+    };
+
+    // Store main document
+    const documentId = await supabaseService.upsertDocument(dbDocument);
+    if (!documentId) {
+      throw new Error(`Failed to store hybrid document: ${apiDocument.doc_id}`);
+    }
+
+    // Create database chunks from page chunks
+    const dbChunks: DatabaseChunk[] = chunks.map((chunk) => ({
+      id: uuidv4(),
+      doc_id: apiDocument.doc_id,
+      document_id: documentId,
+      chunk_id: chunk.pageNumber,
+      content: chunk.cleanContent,
+      embedding: (chunk as any).embedding,
+      metadata: {
+        ...chunk.metadata,
+        pageNumber: chunk.pageNumber,
+        originalContent: chunk.content,
+        apiMetadata: apiDocument.metadata
+      },
+      chunk_type: 'page',
+      keywords: chunk.metadata.keywords || [],
+      related_chunks: []
+    }));
+
+    // Store chunks in batches
+    const chunkBatchSize = 50;
+    for (let i = 0; i < dbChunks.length; i += chunkBatchSize) {
+      const chunkBatch = dbChunks.slice(i, i + chunkBatchSize);
+      const success = await supabaseService.insertDocumentChunks(chunkBatch);
+      if (!success) {
+        throw new Error(`Failed to store chunk batch for hybrid document: ${apiDocument.doc_id}`);
+      }
+    }
+
+    logger.debug(LogCategory.DATABASE, `Successfully stored hybrid document and ${dbChunks.length} page chunks: ${apiDocument.doc_id}`);
+  }
+
+  private async storeMetadataOnly(apiDocument: CrawledDocument): Promise<void> {
+    logger.debug(LogCategory.DATABASE, `Storing metadata-only document: ${apiDocument.doc_id}`);
+
+    // Check if document already exists
+    const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
+    if (existing) {
+      logger.debug(LogCategory.DATABASE, `Document already exists, skipping metadata-only storage: ${apiDocument.doc_id}`);
+      return;
+    }
+
+    // Create database document with API metadata but no chunks
+    const dbDocument: DatabaseDocument = {
+      id: uuidv4(),
+      doc_id: apiDocument.doc_id,
+      content: apiDocument.content || '',
+      source: apiDocument.source,
+      embedding: null,
+      metadata: {
+        ...apiDocument.metadata,
+        noMarkdownFile: true
+      },
+      
+      // Rich metadata from API
+      doc_uuid: apiDocument.doc_uuid,
+      doc_type_code: apiDocument.doc_type_code,
+      doc_type_desc: apiDocument.doc_type_desc,
+      version_code: apiDocument.version_code,
+      doc_long_title: apiDocument.doc_long_title,
+      doc_desc: apiDocument.doc_desc,
+      issue_date: apiDocument.issue_date,
+      guideline_no: apiDocument.guideline_no,
+      supersession_date: apiDocument.supersession_date,
+      keywords: apiDocument.metadata?.keywords || [],
+      topics: apiDocument.topics || [],
+      concepts: apiDocument.concepts || [],
+      document_type: apiDocument.document_type,
+      language: apiDocument.language || 'en',
+      doc_topic_subtopic_list: apiDocument.doc_topic_subtopic_list,
+      doc_keyword_list: apiDocument.doc_keyword_list,
+      doc_ai_type_list: apiDocument.doc_ai_type_list,
+      doc_view_list: apiDocument.doc_view_list,
+      directly_related_doc_list: apiDocument.directly_related_doc_list,
+      version_history_doc_list: apiDocument.version_history_doc_list,
+      reference_doc_list: apiDocument.reference_doc_list,
+      superseded_doc_list: apiDocument.superseded_doc_list
+    };
+
+    // Store main document only
+    const documentId = await supabaseService.upsertDocument(dbDocument);
+    if (!documentId) {
+      throw new Error(`Failed to store metadata-only document: ${apiDocument.doc_id}`);
+    }
+
+    logger.debug(LogCategory.DATABASE, `Successfully stored metadata-only document: ${apiDocument.doc_id}`);
+  }
+
+  private createResult(success: boolean, startTime: number): ETLResult {
+    return {
+      success,
+      documentsProcessed: this.progress.documentsProcessed,
+      chunksCreated: this.progress.chunksCreated,
+      embeddingsGenerated: this.progress.embeddingsGenerated,
+      errors: this.errors,
+      processingTime: Date.now() - startTime,
+      progress: this.progress
+    };
+  }
+
+  getProgress(): ETLProgress {
+    return { ...this.progress };
+  }
+
+  async processingleDocument(docId: string): Promise<boolean> {
+    try {
+      logger.info(LogCategory.ETL, `Processing single hybrid document: ${docId}`);
+      
+      const apiDocument = await this.brdrCrawler.crawlSingleDocument(docId, false);
+      if (!apiDocument) {
+        logger.warn(LogCategory.ETL, `Document not found in API: ${docId}`);
+        return false;
+      }
+
+      await this.processHybridDocument(apiDocument, { generateEmbeddings: true });
+      
+      logger.info(LogCategory.ETL, `Successfully processed single hybrid document: ${docId}`);
+      return true;
+    } catch (error) {
+      logger.error(LogCategory.ETL, `Failed to process single hybrid document: ${docId}`, error);
+      return false;
+    }
+  }
+
+  async deleteDocument(docId: string): Promise<boolean> {
+    try {
+      logger.info(LogCategory.ETL, `Deleting document: ${docId}`);
+      
+      // Delete chunks first (foreign key constraint)
+      await supabaseService.deleteDocumentChunks(docId);
+      
+      // Delete main document
+      const success = await supabaseService.deleteDocument(docId);
+      
+      if (success) {
+        logger.info(LogCategory.ETL, `Successfully deleted document: ${docId}`);
+      } else {
+        logger.error(LogCategory.ETL, `Failed to delete document: ${docId}`);
+      }
+      
+      return success;
+    } catch (error) {
+      logger.error(LogCategory.ETL, `Error deleting document: ${docId}`, error);
+      return false;
+    }
+  }
+
+  async getStats(): Promise<{
+    databaseStats: any;
+    logCounts: any;
+    embeddingService: any;
+  }> {
+    return {
+      databaseStats: await supabaseService.getDatabaseStats(),
+      logCounts: logger.getLogCounts(),
+      embeddingService: {
+        model: embeddingService.getModel(),
+        dimension: embeddingService.getDimension(),
+        isReady: embeddingService.isReady()
+      }
+    };
+  }
+}
+
+// Export singleton instance
+export const etlPipeline = new ETLPipeline();
