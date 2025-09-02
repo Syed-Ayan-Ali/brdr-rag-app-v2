@@ -8,7 +8,6 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import ChatMessage from './ChatMessage';
 import SearchBar from './SearchBar';
-import AuditTrailViewer from './AuditTrailViewer';
 import { AuditTrailManager } from '@/lib/utils/AuditTrail';
 
 export default function ChatPanel() {
@@ -172,17 +171,7 @@ export default function ChatPanel() {
         </div>
       </div>
 
-      {/* Audit Trail Modal */}
-      {showAuditTrail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="w-full max-w-6xl mx-4">
-            <AuditTrailViewer 
-              onClose={() => setShowAuditTrail(false)}
-              sessionId={currentSessionId.current}
-            />
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 }

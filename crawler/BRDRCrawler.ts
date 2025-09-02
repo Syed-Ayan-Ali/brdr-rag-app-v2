@@ -324,7 +324,7 @@ export class BRDRCrawler {
             source: "BRDRAPI",
             status: 'success',
             contentLength: content.length,
-            metadata: crawledDoc.metadata
+            
           });
         }
 

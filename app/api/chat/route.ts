@@ -50,7 +50,7 @@ Always include the metrics and document links when they are provided in the tool
     tools: {
       // Enhanced document search with multiple strategies
       searchDocuments: {
-        description: 'Search for relevant documents in the BRDR database using advanced retrieval strategies',
+        description: 'Search for relevant documents in the BRDR database using keyword strategy',
         inputSchema: z.object({
           query: z.string().describe('The search query'),
           searchType: z.literal('keyword').optional().describe('Search strategy to use (currently only keyword search is enabled)'),
@@ -75,7 +75,7 @@ Always include the metrics and document links when they are provided in the tool
             const orchestrator = await getOrchestrator();
             const response = await orchestrator.processQuery({
               query,
-              searchType: searchType as 'vector' | 'keyword' | 'hybrid' | 'advanced_rag',
+              searchType: searchType as 'keyword',
               limit: finalLimit,
               contextWindow,
               useCache: true,
@@ -120,79 +120,7 @@ Always include the metrics and document links when they are provided in the tool
         },
       },
 
-      // Query clarification tool
-      clarifyQuery: {
-        description: 'Ask the user to clarify their query for better document retrieval',
-        inputSchema: z.object({
-          message: z.string().describe('The clarification message to show to the user'),
-          options: z.array(z.string()).optional().describe('Optional choices for the user to select from'),
-        }),
-      },
-
-      // Multi-step document analysis
-      analyzeDocument: {
-        description: 'Perform detailed analysis of retrieved documents to extract key information',
-        inputSchema: z.object({
-          documentIds: z.array(z.string()).describe('Array of document IDs to analyze'),
-          analysisType: z.enum(['summary', 'extraction', 'comparison']).describe('Type of analysis to perform'),
-        }),
-        execute: async ({ documentIds, analysisType }: { documentIds: string[]; analysisType: string }) => {
-          try {
-            // Use RAG orchestrator to analyze documents
-            const orchestrator = await getOrchestrator();
-            const analysisQuery = `Analyze documents: ${documentIds.join(', ')} for ${analysisType}`;
-            const response = await orchestrator.processQuery({
-              query: analysisQuery,
-              searchType: 'hybrid',
-              limit: documentIds.length,
-              useCache: false,
-              trackPerformance: true
-            });
-
-            let analysis = '';
-            switch (analysisType) {
-              case 'summary':
-                analysis = `Analyzed ${response.documents.length} documents. Key themes: ${response.documents.map((d: any) => d.metadata?.topics?.join(', ') || 'N/A').join('; ')}`;
-                break;
-              case 'extraction':
-                analysis = `Extracted key information from ${response.documents.length} documents. Content length: ${response.documents.reduce((sum: number, d: any) => sum + d.content.length, 0)} characters`;
-                break;
-              case 'comparison':
-                analysis = `Compared ${response.documents.length} documents. Found ${new Set(response.documents.map((d: any) => d.doc_id)).size} unique documents`;
-                break;
-            }
-
-            return { 
-              analysis, 
-              documentCount: response.documents.length,
-              processingTime: response.processingTime,
-              toolsUsed: response.toolsUsed
-            };
-          } catch (error) {
-            console.error('Analysis error:', error);
-            return { error: 'Failed to analyze documents' };
-          }
-        },
-      },
-
-      // Context window management
-      manageContext: {
-        description: 'Manage the context window by selecting the most relevant information',
-        inputSchema: z.object({
-          action: z.enum(['expand', 'reduce', 'focus']).describe('Action to perform on context'),
-          criteria: z.string().optional().describe('Criteria for context management'),
-        }),
-        execute: async ({ action, criteria }: { action: string; criteria?: string }) => {
-          const orchestrator = await getOrchestrator();
-          return {
-            action: action,
-            criteria: criteria || 'relevance',
-            message: `Context window ${action}ed based on ${criteria || 'relevance'} criteria`,
-            availableStrategies: orchestrator.getAvailableStrategies(),
-            strategyDescriptions: orchestrator.getStrategyDescriptions()
-          };
-        },
-      },
+     
 
       // Query refinement
       refineQuery: {
