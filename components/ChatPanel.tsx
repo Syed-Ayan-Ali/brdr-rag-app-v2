@@ -1,6 +1,8 @@
 'use client';
 
+// import { Message, MessageContent } from '@/components/message';
 import { useChat } from '@ai-sdk/react';
+// import { Response } from '@/components/response';
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
@@ -11,7 +13,7 @@ import SearchBar from './SearchBar';
 import { AuditTrailManager } from '@/lib/utils/AuditTrail';
 
 export default function ChatPanel() {
-  const [showAuditTrail, setShowAuditTrail] = useState(false);
+  // const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -19,12 +21,15 @@ export default function ChatPanel() {
   const currentSessionId = useRef<string>('');
   
   const { messages, sendMessage, addToolResult, status } = useChat({
+
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
 
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    // sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
+
+  // const { messages, sendMessage, status } = useChat();
 
   // Initialize session on component mount
   useEffect(() => {
@@ -121,12 +126,12 @@ export default function ChatPanel() {
                 <span>Assistant is responding...</span>
               </div>
             )}
-            <button
+            {/* <button
               onClick={() => setShowAuditTrail(!showAuditTrail)}
               className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
             >
               {showAuditTrail ? 'Hide' : 'Show'} Audit Trail
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -141,7 +146,7 @@ export default function ChatPanel() {
             <ChatMessage 
               key={message.id} 
               message={message} 
-              addToolResult={addToolResult}
+              // addToolResult={addToolResult}
               isLast={index === messages.length - 1}
               onClarificationSelect={handleClarificationSelect}
             />
@@ -161,6 +166,29 @@ export default function ChatPanel() {
         </div>
       </div>
 
+
+    {/* <div className="max-w-4xl mx-auto p-6 relative size-full rounded-lg border h-[600px]">
+      <div className="flex flex-col h-full">
+        {messages.map((message) => (
+          <Message from={message.role} key={message.id}>
+            <MessageContent>
+              {message.parts.map((part, i) => {
+                switch (part.type) {
+                  case 'text': // we don't use any reasoning or tool calls in this example
+                    return (
+                      <Response key={`${message.id}-${i}`}>
+                        {part.text}
+                      </Response>
+                    );
+                  default:
+                    return null;
+                }
+              })} 
+            </MessageContent>
+          </Message>
+        ))}
+      </div>
+    </div> */}
       {/* Floating Search Bar */}
       <div className="p-6 backdrop-blur-sm border-t border-slate-200">
         <div className="max-w-4xl mx-auto">

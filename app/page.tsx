@@ -1,5 +1,4 @@
 import ChatPanel from '@/components/ChatPanel';
-import AuditWarning from '@/components/AuditWarning';
 
 export default function Home() {
   return (

@@ -251,61 +251,39 @@ export class SupabaseService {
     options: SearchOptions = {}
   ): Promise<SearchResult[]> {
     const {
-      similarity_threshold = 0.5,
+      similarity_threshold = 0.3,
       match_count = 10,
       search_table = 'brdr_documents_data'
     } = options;
 
     try {
-      // Try simple vector search RPC function first
-      try {
-        const { data, error } = await this.supabase.rpc('simple_vector_search', {
+        console.log("query embedding is", queryEmbedding.slice(0, 10));
+        console.log("vector search options are", options);
+        const { data, error } = await this.supabase.rpc('vector_search', {
+          search_table: search_table,
           query_embedding: queryEmbedding,
-          match_threshold: similarity_threshold,
+          similarity_threshold: similarity_threshold,
           match_count
         });
 
-        if (!error) {
-          // Map the results to match the expected SearchResult format
-          return (data || []).map((item: any) => ({
-            id: item.id,
-            doc_id: item.doc_id,
-            content: item.content,
-            similarity: item.similarity,
-            metadata: {
-              document_title: item.document_title,
-              document_type: item.document_type,
-              issue_date: item.issue_date
-            }
-          }));
+        console.log("vector search data is", data);
+
+        if (error) {
+          console.error('Vector search RPC error:', error);
+          return [];
         }
-      } catch (rpcError) {
+
+        // Map the results to match the expected SearchResult format
+        return (data || []).map((item: any) => ({
+          id: item.id,
+          doc_id: item.doc_id,
+          content: item.content,
+          similarity: item.similarity,
+          metadata: item.metadata
+        }));
+    } catch (rpcError) {
         console.log('Simple vector search RPC function not available, using fallback');
-      }
-
-      // Fallback: Direct vector similarity search
-      const { data, error } = await this.supabase
-        .from(search_table)
-        .select('id, doc_id, content, metadata')
-        .not('embedding', 'is', null)
-        .limit(match_count);
-
-      if (error) {
-        console.error('Vector search error:', error);
         return [];
-      }
-
-      // Calculate similarity manually (simplified)
-      return (data || []).map(item => ({
-        id: item.id,
-        doc_id: item.doc_id,
-        content: item.content,
-        similarity: 0.8, // Placeholder similarity
-        metadata: item.metadata
-      }));
-    } catch (error) {
-      console.error('Vector search exception:', error);
-      return [];
     }
   }
 

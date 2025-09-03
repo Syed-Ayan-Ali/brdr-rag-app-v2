@@ -1,10 +1,11 @@
 import { embeddingService } from './embeddings/EmbeddingService';
 import { supabaseService, SearchResult, AdvancedSearchResult } from './database/SupabaseService';
 import { logger, LogCategory } from './logging/Logger';
+import { findRelevantContent } from './embeddings/simpleVectorSearch';
 
 export interface QueryRequest {
   query: string;
-  searchType?: 'vector' | 'keyword' | 'hybrid' | 'advanced_rag';
+  searchType?: 'vector';
   limit?: number;
   useCache?: boolean;
   trackPerformance?: boolean;
@@ -78,9 +79,6 @@ export class RAGOrchestrator {
     const startTime = Date.now();
     const auditSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Force keyword search only
-    request.searchType = 'keyword';
-    
     logger.info(LogCategory.RAG, `Processing query: "${request.query}"`, {
       searchType: request.searchType,
       limit: request.limit,
@@ -111,32 +109,61 @@ export class RAGOrchestrator {
       const analysis = await this.analyzeQuery(request.query);
       performanceMetrics.queryAnalysisTime = Date.now() - analysisStartTime;
 
-      // Phase 2: Skip embedding generation since we only use keyword search
+      // Phase 2: do vector search
+      const vectorSearchStartTime = Date.now();
+      const vectorSearchResults = await findRelevantContent(request.query);
+      performanceMetrics.vectorSearchTime = Date.now() - vectorSearchStartTime;
+
+
       const embeddingStartTime = Date.now();
       let queryEmbedding: number[] | null = null;
-      // No embedding generation needed for keyword search
+      
+      // if (request.searchType !== 'keyword') {
+      //   const embeddingResult = await embeddingService.generateEmbedding(request.query);
+      //   queryEmbedding = embeddingResult.embedding;
+      // }
+
+      if (request.searchType !== 'vector') {
+
       performanceMetrics.embeddingGenerationTime = Date.now() - embeddingStartTime;
 
       // Phase 3: Search documents
-      const searchStartTime = Date.now();
-      let documents: SearchResult[] = [];
-      let advancedResults: AdvancedSearchResult[] | undefined;
+      // const searchStartTime = Date.now();
+      // let documents: SearchResult[] = [];
+      // let advancedResults: AdvancedSearchResult[] | undefined;
 
-      // Always use simple keyword search
-      documents = await this.searchDocuments(
-        request.query,
-        null,
-        'keyword',
-        request.limit || 10,
-        0
-      );
-      performanceMetrics.vectorSearchTime = Date.now() - searchStartTime;
+      // if (request.searchType === 'advanced_rag') {
+      //   if (!queryEmbedding) {
+      //     throw new Error('Query embedding required for advanced RAG search');
+      //   }
+      //   advancedResults = await this.searchAdvancedRAG(
+      //     request.query,
+      //     queryEmbedding,
+      //     request.limit || 3,
+      //     request.similarityThreshold || 0.7,
+      //     request.contextWindow || 2
+      //   );
+      //   // Convert advanced results to basic format for backward compatibility
+      //   documents = this.convertAdvancedToBasicResults(advancedResults);
+      // } else {
+      //   documents = await this.searchDocuments(
+      //     request.query,
+      //     queryEmbedding,
+      //     request.searchType || 'vector',
+      //     request.limit || 10,
+      //     request.similarityThreshold || 0.7
+      //   );
+      // }
+      // performanceMetrics.vectorSearchTime = Date.now() - searchStartTime;
 
       // Phase 4: Format context and generate response
       const formattingStartTime = Date.now();
       let context: string;
-      // Always use simple context formatting
-      context = this.formatContext(documents);
+      // if (request.searchType === 'advanced_rag' && advancedResults) {
+      //   context = this.formatAdvancedContext(advancedResults);
+      // } else {
+        context = this.formatContext(documents);
+      // }
       
       const metrics = this.calculateMetrics(documents, performanceMetrics);
       const documentLinks = this.generateDocumentLinks(documents);
@@ -259,10 +286,33 @@ export class RAGOrchestrator {
     limit: number,
     similarityThreshold: number
   ): Promise<SearchResult[]> {
-    // Only use keyword search regardless of the search type parameter
-    return await supabaseService.keywordSearch(query, {
-      match_count: limit
-    });
+    switch (searchType) {
+      case 'vector':
+        if (!queryEmbedding) {
+          throw new Error('Query embedding required for vector search');
+        }
+        return await supabaseService.vectorSearch(queryEmbedding, {
+          similarity_threshold: similarityThreshold,
+          match_count: limit
+        });
+
+      case 'keyword':
+        return await supabaseService.keywordSearch(query, {
+          match_count: limit
+        });
+
+      case 'hybrid':
+        if (!queryEmbedding) {
+          throw new Error('Query embedding required for hybrid search');
+        }
+        return await supabaseService.hybridSearch(query, queryEmbedding, {
+          similarity_threshold: similarityThreshold,
+          match_count: limit
+        });
+
+      default:
+        throw new Error(`Unsupported search type: ${searchType}`);
+    }
   }
 
   private async searchAdvancedRAG(

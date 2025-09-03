@@ -145,3 +145,5 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   const result = await embeddingService.generateEmbedding(text);
   return result.embedding;
 }
+
+

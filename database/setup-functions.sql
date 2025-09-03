@@ -46,7 +46,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Function for vector similarity search
 CREATE OR REPLACE FUNCTION vector_search(
     query_embedding VECTOR(384),
-    similarity_threshold FLOAT DEFAULT 0.7,
+    similarity_threshold FLOAT DEFAULT 0.3,
     match_count INT DEFAULT 10,
     search_table TEXT DEFAULT 'brdr_documents_data'
 )

@@ -4,12 +4,11 @@ import { UIMessage } from 'ai';
 
 interface ChatMessageProps {
   message: UIMessage;
-  addToolResult: (options: { tool: string; toolCallId: string; output: unknown }) => void;
   isLast: boolean;
   onClarificationSelect?: (option: string) => void;
 }
 
-export default function ChatMessage({ message, addToolResult, isLast, onClarificationSelect }: ChatMessageProps) {
+export default function ChatMessage({ message,  isLast, onClarificationSelect }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
 
@@ -53,6 +52,7 @@ export default function ChatMessage({ message, addToolResult, isLast, onClarific
             : 'bg-white border border-slate-200 text-slate-800'
         }`}>
           {message.parts.map((part, index) => {
+            console.log("part is", part, "with index", index)
             switch (part.type) {
               case 'step-start':
                 return index > 0 ? (
@@ -68,280 +68,388 @@ export default function ChatMessage({ message, addToolResult, isLast, onClarific
                   </div>
                 );
 
-              case 'tool-searchDocuments': {
-                const callId = part.toolCallId;
+              // case 'tool-find_relevant_brdr_document_data': {
+               
+              //     switch (part.state) {
+              //       case 'input-streaming':
+              //         return (
+              //           <div key={index} className="space-y-3">
+              //             Retreiving chunks...
+              //           </div>
+              //         );
+                    
+              //         case 'input-available':
+              //           return (
+              //             <div key={index} className="space-y-3">
+              //               Retreiving chunks for {part.input.question}...
+              //             </div>
+              //           );
 
+              //         case 'output-available':
+              //           return (
+              //             <div key={index} className="space-y-3">
+              //               Chunks retreived: 
+              //               {part.output.map((chunk: any, idx: number) => (
+              //                 <div key={idx}>{chunk}</div>
+              //               ))}
+              //             </div>
+              //           );
+
+              //         case 'output-error':
+              //           return (
+              //             <div key={index} className="space-y-3">
+              //               Error retreiving chunks: {part.errorText}...
+              //             </div>
+              //           );
+
+              //     }
+              //     break;
+              //   }
+              
+              case 'tool-tell_the_user_the_answer': {
                 switch (part.state) {
                   case 'input-streaming':
                     return (
-                      <div key={callId} className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        <span>Searching documents...</span>
+                      <div key={index} className="space-y-3">
+                        Generating answer...
                       </div>
                     );
+                  
                   case 'input-available':
                     return (
-                      <div key={callId} className="space-y-3">
-                        <div className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
-                          <strong>Search Query:</strong> {(part.input as { query: string }).query}
-                          {(part.input as any).searchType && (
-                            <div className="mt-1 text-xs text-blue-600">
-                              Strategy: {(part.input as any).searchType}
-                            </div>
-                          )}
-                        </div>
+                      <div key={index} className="space-y-3">
+                        Generating answer for {part.input.question}...
                       </div>
                     );
                   case 'output-available':
-                    const output = part.output as any;
                     return (
-                      <div key={callId} className="space-y-3">
-                        <div className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
-                          <div className="font-semibold text-green-800">Search Results</div>
-                          <div className="mt-2 space-y-1 text-xs">
-                            <div>📄 Documents found: {output.documents}</div>
-                            <div>🔍 Search strategy: {output.searchStrategy}</div>
-                            <div>📝 Expanded queries: {output.expandedQueries}</div>
-                            {output.analysis && (
-                              <div>🎯 Intent: {output.analysis.intent}</div>
-                            )}
-                          </div>
-                        </div>
+                      <div key={index} className="space-y-3">
+                        Answer generated: {part.output}
+                      </div>
+                    );
+                  
+                  case 'output-error':
+                    return (
+                      <div key={index} className="space-y-3">
+                        Error generating answer: {part.errorText}...
+                      </div>
+                    );
+                  }
+              }
+
+              // case 'tool-weather': {
+              //   const callId = part.toolCallId;
+
+              //   switch (part.state) {
+              //     case 'input-streaming':
+              //       return (
+              //         <div key={callId} className="flex items-center space-x-2">
+              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+              //           <span>Getting weather...</span>
+              //         </div>
+              //       );
+              //     case 'input-available':
+              //       return (
+              //         <div key={callId} className="space-y-3">
                         
-                        {/* Metrics Display */}
-                        {output.metricsText && (
-                          <div className="text-xs bg-blue-50 p-3 rounded-lg border border-blue-200">
-                            <div className="font-semibold text-blue-800 mb-2">Query Performance</div>
-                            <div className="space-y-1 text-blue-700 whitespace-pre-line">
-                              {output.metricsText}
-                            </div>
-                          </div>
-                        )}
+              //         </div>
+              //       );
+              //     case 'output-available':
+              //       return (
+              //         <div key={callId} className="space-y-3">
+              //            {part.output}
+              //         </div>
+              //       );
+              //     case 'output-error':
+              //       return (
+              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+              //           ❌ Weather error: {part.errorText}
+              //         </div>
+              //       );
+              //   }
+              //   break;
+              // }
+
+              // case 'tool-cityAttractions': {
+              //   return (
+              //     <div key={index} className="space-y-3">
+              //       {part.output && part.output.location}
+              //     </div>
+              //   );
+              // }
+            
+              // case 'tool-searchDocuments': {
+              //   const callId = part.toolCallId;
+
+              //   switch (part.state) {
+              //     case 'input-streaming':
+              //       return (
+              //         <div key={callId} className="flex items-center space-x-2">
+              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+              //           <span>Searching documents...</span>
+              //         </div>
+              //       );
+              //     case 'input-available':
+              //       return (
+              //         <div key={callId} className="space-y-3">
+              //           <div className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
+              //             <strong>Search Query:</strong> {(part.input as { query: string }).query}
+              //             {(part.input as any).searchType && (
+              //               <div className="mt-1 text-xs text-blue-600">
+              //                 Strategy: {(part.input as any).searchType}
+              //               </div>
+              //             )}
+              //           </div>
+              //         </div>
+              //       );
+              //     case 'output-available':
+              //       const output = part.output as any;
+              //       return (
+              //         <div key={callId} className="space-y-3">
+              //           <div className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
+              //             <div className="font-semibold text-green-800">Search Results</div>
+              //             <div className="mt-2 space-y-1 text-xs">
+              //               <div>📄 Documents found: {output.documents}</div>
+              //               <div>🔍 Search strategy: {output.searchStrategy}</div>
+              //               <div>📝 Expanded queries: {output.expandedQueries}</div>
+              //               {output.analysis && (
+              //                 <div>🎯 Intent: {output.analysis.intent}</div>
+              //               )}
+              //             </div>
+              //           </div>
                         
-                        {/* Document Links */}
-                        {output.documentLinks && output.documentLinks.length > 0 && (
-                          <div className="text-xs bg-purple-50 p-3 rounded-lg border border-purple-200">
-                            <div className="font-semibold text-purple-800 mb-2">Source Documents</div>
-                            <div className="space-y-1">
-                              {output.documentLinks.map((link: any, idx: number) => (
-                                <a
-                                  key={idx}
-                                  href={link.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block text-purple-600 hover:text-purple-800 hover:underline transition-colors"
-                                >
-                                  📄 {link.docId}
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+              //           {/* Metrics Display */}
+              //           {output.metricsText && (
+              //             <div className="text-xs bg-blue-50 p-3 rounded-lg border border-blue-200">
+              //               <div className="font-semibold text-blue-800 mb-2">Query Performance</div>
+              //               <div className="space-y-1 text-blue-700 whitespace-pre-line">
+              //                 {output.metricsText}
+              //               </div>
+              //             </div>
+              //           )}
                         
-                        {output.context && (
-                          <div className="text-xs bg-gray-50 p-2 rounded border">
-                            <div className="font-semibold mb-1">Retrieved Context:</div>
-                            <div className="text-gray-600 max-h-32 overflow-y-auto">
-                              {output.context.substring(0, 300)}...
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  case 'output-error':
-                    return (
-                      <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
-                        ❌ Search error: {part.errorText}
-                      </div>
-                    );
-                }
-                break;
-              }
+              //           {/* Document Links */}
+              //           {output.documentLinks && output.documentLinks.length > 0 && (
+              //             <div className="text-xs bg-purple-50 p-3 rounded-lg border border-purple-200">
+              //               <div className="font-semibold text-purple-800 mb-2">Source Documents</div>
+              //               <div className="space-y-1">
+              //                 {output.documentLinks.map((link: any, idx: number) => (
+              //                   <a
+              //                     key={idx}
+              //                     href={link.url}
+              //                     target="_blank"
+              //                     rel="noopener noreferrer"
+              //                     className="block text-purple-600 hover:text-purple-800 hover:underline transition-colors"
+              //                   >
+              //                     📄 {link.docId}
+              //                   </a>
+              //                 ))}
+              //               </div>
+              //             </div>
+              //           )}
+                        
+              //           {output.context && (
+              //             <div className="text-xs bg-gray-50 p-2 rounded border">
+              //               <div className="font-semibold mb-1">Retrieved Context:</div>
+              //               <div className="text-gray-600 max-h-32 overflow-y-auto">
+              //                 {output.context.substring(0, 300)}...
+              //               </div>
+              //             </div>
+              //           )}
+              //         </div>
+              //       );
+              //     case 'output-error':
+              //       return (
+              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+              //           ❌ Search error: {part.errorText}
+              //         </div>
+              //       );
+              //   }
+              //   break;
+              // }
 
-              case 'tool-clarifyQuery': {
-                const callId = part.toolCallId;
+              // case 'tool-clarifyQuery': {
+              //   const callId = part.toolCallId;
 
-                switch (part.state) {
-                  case 'input-streaming':
-                    return (
-                      <div key={callId} className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        <span>Preparing clarification request...</span>
-                      </div>
-                    );
-                  case 'input-available':
-                    return (
-                      <div key={callId} className="space-y-3">
-                        <div className="text-sm bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                          <div className="font-semibold text-yellow-800">Clarification Needed</div>
-                          <div className="mt-2">{(part.input as { message: string }).message}</div>
-                          {(part.input as any).options && (
-                            <div className="mt-3 space-y-2">
-                              <div className="text-xs font-medium text-yellow-700">Please select an option:</div>
-                              {(part.input as any).options.map((option: string, idx: number) => (
-                                <button
-                                  key={idx}
-                                  onClick={() => handleClarificationClick(option)}
-                                  className="block w-full text-left px-3 py-2 bg-white border border-yellow-300 rounded-md hover:bg-yellow-50 transition-all duration-300 hover:scale-105 shadow-sm text-sm font-medium"
-                                >
-                                  {option}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  case 'output-available':
-                    return (
-                      <div key={callId} className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
-                        ✅ Query clarified: {part.output as string}
-                      </div>
-                    );
-                  case 'output-error':
-                    return (
-                      <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
-                        ❌ Clarification error: {part.errorText}
-                      </div>
-                    );
-                }
-                break;
-              }
+              //   switch (part.state) {
+              //     case 'input-streaming':
+              //       return (
+              //         <div key={callId} className="flex items-center space-x-2">
+              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+              //           <span>Preparing clarification request...</span>
+              //         </div>
+              //       );
+              //     case 'input-available':
+              //       return (
+              //         <div key={callId} className="space-y-3">
+              //           <div className="text-sm bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+              //             <div className="font-semibold text-yellow-800">Clarification Needed</div>
+              //             <div className="mt-2">{(part.input as { message: string }).message}</div>
+              //             {(part.input as any).options && (
+              //               <div className="mt-3 space-y-2">
+              //                 <div className="text-xs font-medium text-yellow-700">Please select an option:</div>
+              //                 {(part.input as any).options.map((option: string, idx: number) => (
+              //                   <button
+              //                     key={idx}
+              //                     onClick={() => handleClarificationClick(option)}
+              //                     className="block w-full text-left px-3 py-2 bg-white border border-yellow-300 rounded-md hover:bg-yellow-50 transition-all duration-300 hover:scale-105 shadow-sm text-sm font-medium"
+              //                   >
+              //                     {option}
+              //                   </button>
+              //                 ))}
+              //               </div>
+              //             )}
+              //           </div>
+              //         </div>
+              //       );
+              //     case 'output-available':
+              //       return (
+              //         <div key={callId} className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
+              //           ✅ Query clarified: {part.output as string}
+              //         </div>
+              //       );
+              //     case 'output-error':
+              //       return (
+              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+              //           ❌ Clarification error: {part.errorText}
+              //         </div>
+              //       );
+              //   }
+              //   break;
+              // }
 
-              case 'tool-analyzeDocument': {
-                const callId = part.toolCallId;
+              // case 'tool-analyzeDocument': {
+              //   const callId = part.toolCallId;
 
-                switch (part.state) {
-                  case 'input-streaming':
-                    return (
-                      <div key={callId} className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        <span>Analyzing documents...</span>
-                      </div>
-                    );
-                  case 'input-available':
-                    const input = part.input as { documentIds: string[]; analysisType: string };
-                    return (
-                      <div key={callId} className="space-y-3">
-                        <div className="text-sm bg-purple-50 p-3 rounded-lg border border-purple-200">
-                          <div className="font-semibold text-purple-800">Document Analysis</div>
-                          <div className="mt-2 space-y-1 text-xs">
-                            <div>📊 Analysis type: {input.analysisType}</div>
-                            <div>📄 Documents: {input.documentIds.length}</div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  case 'output-available':
-                    const output = part.output as any;
-                    return (
-                      <div key={callId} className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
-                        <div className="font-semibold text-green-800">Analysis Complete</div>
-                        <div className="mt-2 text-xs">
-                          {output.analysis}
-                          <div className="mt-1">📊 Documents processed: {output.documentCount}</div>
-                        </div>
-                      </div>
-                    );
-                  case 'output-error':
-                    return (
-                      <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
-                        ❌ Analysis error: {part.errorText}
-                      </div>
-                    );
-                }
-                break;
-              }
+              //   switch (part.state) {
+              //     case 'input-streaming':
+              //       return (
+              //         <div key={callId} className="flex items-center space-x-2">
+              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+              //           <span>Analyzing documents...</span>
+              //         </div>
+              //       );
+              //     case 'input-available':
+              //       const input = part.input as { documentIds: string[]; analysisType: string };
+              //       return (
+              //         <div key={callId} className="space-y-3">
+              //           <div className="text-sm bg-purple-50 p-3 rounded-lg border border-purple-200">
+              //             <div className="font-semibold text-purple-800">Document Analysis</div>
+              //             <div className="mt-2 space-y-1 text-xs">
+              //               <div>📊 Analysis type: {input.analysisType}</div>
+              //               <div>📄 Documents: {input.documentIds.length}</div>
+              //             </div>
+              //           </div>
+              //         </div>
+              //       );
+              //     case 'output-available':
+              //       const output = part.output as any;
+              //       return (
+              //         <div key={callId} className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
+              //           <div className="font-semibold text-green-800">Analysis Complete</div>
+              //           <div className="mt-2 text-xs">
+              //             {output.analysis}
+              //             <div className="mt-1">📊 Documents processed: {output.documentCount}</div>
+              //           </div>
+              //         </div>
+              //       );
+              //     case 'output-error':
+              //       return (
+              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+              //           ❌ Analysis error: {part.errorText}
+              //         </div>
+              //       );
+              //   }
+              //   break;
+              // }
 
-              case 'tool-manageContext': {
-                const callId = part.toolCallId;
+              // case 'tool-manageContext': {
+              //   const callId = part.toolCallId;
 
-                switch (part.state) {
-                  case 'input-streaming':
-                    return (
-                      <div key={callId} className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        <span>Managing context...</span>
-                      </div>
-                    );
-                  case 'input-available':
-                    const input = part.input as { action: string; criteria?: string };
-                    return (
-                      <div key={callId} className="space-y-3">
-                        <div className="text-sm bg-indigo-50 p-3 rounded-lg border border-indigo-200">
-                          <div className="font-semibold text-indigo-800">Context Management</div>
-                          <div className="mt-2 space-y-1 text-xs">
-                            <div>⚙️ Action: {input.action}</div>
-                            {input.criteria && <div>🎯 Criteria: {input.criteria}</div>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  case 'output-available':
-                    const output = part.output as any;
-                    return (
-                      <div key={callId} className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
-                        ✅ {output.message}
-                      </div>
-                    );
-                  case 'output-error':
-                    return (
-                      <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
-                        ❌ Context management error: {part.errorText}
-                      </div>
-                    );
-                }
-                break;
-              }
+              //   switch (part.state) {
+              //     case 'input-streaming':
+              //       return (
+              //         <div key={callId} className="flex items-center space-x-2">
+              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+              //           <span>Managing context...</span>
+              //         </div>
+              //       );
+              //     case 'input-available':
+              //       const input = part.input as { action: string; criteria?: string };
+              //       return (
+              //         <div key={callId} className="space-y-3">
+              //           <div className="text-sm bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+              //             <div className="font-semibold text-indigo-800">Context Management</div>
+              //             <div className="mt-2 space-y-1 text-xs">
+              //               <div>⚙️ Action: {input.action}</div>
+              //               {input.criteria && <div>🎯 Criteria: {input.criteria}</div>}
+              //             </div>
+              //           </div>
+              //         </div>
+              //       );
+              //     case 'output-available':
+              //       const output = part.output as any;
+              //       return (
+              //         <div key={callId} className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
+              //           ✅ {output.message}
+              //         </div>
+              //       );
+              //     case 'output-error':
+              //       return (
+              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+              //           ❌ Context management error: {part.errorText}
+              //         </div>
+              //       );
+              //   }
+              //   break;
+              // }
 
-              case 'tool-refineQuery': {
-                const callId = part.toolCallId;
+              // case 'tool-refineQuery': {
+              //   const callId = part.toolCallId;
 
-                switch (part.state) {
-                  case 'input-streaming':
-                    return (
-                      <div key={callId} className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        <span>Refining query...</span>
-                      </div>
-                    );
-                  case 'input-available':
-                    const input = part.input as { originalQuery: string; feedback: string };
-                    return (
-                      <div key={callId} className="space-y-3">
-                        <div className="text-sm bg-orange-50 p-3 rounded-lg border border-orange-200">
-                          <div className="font-semibold text-orange-800">Query Refinement</div>
-                          <div className="mt-2 space-y-1 text-xs">
-                            <div>🔍 Original: {input.originalQuery}</div>
-                            <div>💭 Feedback: {input.feedback}</div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  case 'output-available':
-                    const output = part.output as any;
-                    return (
-                      <div key={callId} className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
-                        <div className="font-semibold text-green-800">Query Refined</div>
-                        <div className="mt-2 text-xs">
-                          <div>🔍 Refined query: {output.refinedQuery}</div>
-                        </div>
-                      </div>
-                    );
-                  case 'output-error':
-                    return (
-                      <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
-                        ❌ Query refinement error: {part.errorText}
-                      </div>
-                    );
-                }
-                break;
-              }
-
-              default:
-                return null;
+              //   switch (part.state) {
+              //     case 'input-streaming':
+              //       return (
+              //         <div key={callId} className="flex items-center space-x-2">
+              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+              //           <span>Refining query...</span>
+              //         </div>
+              //       );
+              //     case 'input-available':
+              //       const input = part.input as { originalQuery: string; feedback: string };
+              //       return (
+              //         <div key={callId} className="space-y-3">
+              //           <div className="text-sm bg-orange-50 p-3 rounded-lg border border-orange-200">
+              //             <div className="font-semibold text-orange-800">Query Refinement</div>
+              //             <div className="mt-2 space-y-1 text-xs">
+              //               <div>🔍 Original: {input.originalQuery}</div>
+              //               <div>💭 Feedback: {input.feedback}</div>
+              //             </div>
+              //           </div>
+              //         </div>
+              //       );
+              //     case 'output-available':
+              //       const output = part.output as any;
+              //       return (
+              //         <div key={callId} className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
+              //           <div className="font-semibold text-green-800">Query Refined</div>
+              //           <div className="mt-2 text-xs">
+              //             <div>🔍 Refined query: {output.refinedQuery}</div>
+              //           </div>
+              //         </div>
+              //       );
+              //     case 'output-error':
+              //       return (
+              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+              //           ❌ Query refinement error: {part.errorText}
+              //         </div>
+              //       );
+              //   }
+              //   break;
+              // }
             }
-          })}
+          }
+          )}
         </div>
       </div>
     </div>
