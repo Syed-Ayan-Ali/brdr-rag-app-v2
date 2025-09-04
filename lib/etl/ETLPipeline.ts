@@ -1,7 +1,7 @@
 import { BRDRCrawler, CrawledDocument } from '../../crawler/BRDRCrawler';
 import { markdownPageChunker, ProcessedDocument, PageChunk } from '../chunking/MarkdownPageChunker';
-import { embeddingService } from '../embeddings/EmbeddingService';
-import { supabaseService, DatabaseDocument, DatabaseChunk } from '../database/SupabaseService';
+import { embeddingService, EmbeddingService } from '../embeddings/EmbeddingService';
+import { supabaseService, DatabaseDocument, DatabaseChunk, SupabaseService } from '../database/SupabaseService';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface ETLOptions {
@@ -45,9 +45,16 @@ export class ETLPipeline {
   private brdrCrawler: BRDRCrawler;
   private progress: ETLProgress;
   private errors: string[] = [];
+  private supabaseServiceInstance: SupabaseService;
+  private embeddingServiceInstance: EmbeddingService;
 
-  constructor() {
+  constructor(
+    supabaseServiceInstance: SupabaseService = supabaseService,
+    embeddingServiceInstance: EmbeddingService = embeddingService
+  ) {
     this.brdrCrawler = new BRDRCrawler();
+    this.supabaseServiceInstance = supabaseServiceInstance;
+    this.embeddingServiceInstance = embeddingServiceInstance;
     
     this.progress = {
       phase: 'crawling',
@@ -68,7 +75,7 @@ export class ETLPipeline {
 
     try {
       // Test database connection first
-      const isConnected = await supabaseService.testConnection();
+      const isConnected = await this.supabaseServiceInstance.testConnection();
       if (!isConnected) {
         throw new Error('Database connection failed');
       }
@@ -188,7 +195,7 @@ export class ETLPipeline {
 
       // Check if document already exists
       if (options.skipExisting) {
-        const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
+        const existing = await this.supabaseServiceInstance.getDocumentByDocId(apiDocument.doc_id);
         if (existing) {
           console.info(`Skipping existing document: ${apiDocument.doc_id}`);
           this.progress.documentsSkipped++;
@@ -249,7 +256,7 @@ export class ETLPipeline {
 
       // Check if document already exists
       if (options.skipExisting) {
-        const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
+        const existing = await this.supabaseServiceInstance.getDocumentByDocId(apiDocument.doc_id);
         if (existing) {
           console.info(`Skipping existing document: ${apiDocument.doc_id}`);
           this.progress.documentsProcessed++;
@@ -327,7 +334,8 @@ export class ETLPipeline {
     
     for (const chunk of chunks) {
       try {
-        const embeddingResult = await embeddingService.generateEmbedding(chunk.cleanContent);
+        console.log("chunk is", chunk.cleanContent)
+        const embeddingResult = await this.embeddingServiceInstance.generateEmbedding(chunk.cleanContent);
         chunk.embedding = embeddingResult.embedding;
         this.progress.embeddingsGenerated++;
       } catch (error) {
@@ -379,29 +387,39 @@ export class ETLPipeline {
     };
 
     // Store main document
-    const documentId = await supabaseService.upsertDocument(dbDocument);
+    const documentId = await this.supabaseServiceInstance.upsertDocument(dbDocument);
     if (!documentId) {
       throw new Error(`Failed to store hybrid document: ${apiDocument.doc_id}`);
     }
 
     // Create database chunks from page chunks
-    const dbChunks = chunks.map((chunk) => ({
-      id: uuidv4(),
-      doc_id: apiDocument.doc_id,
-      document_id: documentId,
-      chunk_id: chunk.pageNumber,
-      content: chunk.cleanContent,
-      embedding: chunk.embedding,
-      chunk_type: 'page',
-      keywords: chunk.metadata.keywords,
-      related_chunks: []
-    }));
+    const dbChunks = chunks.map((chunk) => {
+      // Extract creation date components if available
+      const creationYear = markdownDoc.metadata.creationYear || undefined;
+      const creationMonth = markdownDoc.metadata.creationMonth || undefined;
+      const creationDay = markdownDoc.metadata.creationDay || undefined;
+
+      return {
+        id: uuidv4(),
+        doc_id: apiDocument.doc_id,
+        document_id: documentId,
+        chunk_id: chunk.pageNumber,
+        content: chunk.cleanContent,
+        embedding: chunk.embedding,
+        chunk_type: chunk.metadata.chunkType,
+        keywords: chunk.metadata.keywords,
+        related_chunks: [],
+        creation_year: creationYear,
+        creation_month: creationMonth,
+        creation_day: creationDay // Note: column name is creation_date in database
+      };
+    });
 
     // Store chunks in batches
     const chunkBatchSize = 50;
     for (let i = 0; i < dbChunks.length; i += chunkBatchSize) {
       const chunkBatch = dbChunks.slice(i, i + chunkBatchSize);
-      const success = await supabaseService.insertDocumentChunks(chunkBatch);
+      const success = await this.supabaseServiceInstance.insertDocumentChunks(chunkBatch);
       if (!success) {
         throw new Error(`Failed to store chunk batch for hybrid document: ${apiDocument.doc_id}`);
       }
@@ -414,7 +432,7 @@ export class ETLPipeline {
     console.debug(`Storing metadata-only document: ${apiDocument.doc_id}`);
 
     // Check if document already exists
-    const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
+    const existing = await this.supabaseServiceInstance.getDocumentByDocId(apiDocument.doc_id);
     if (existing) {
       console.debug(`Document already exists, skipping metadata-only storage: ${apiDocument.doc_id}`);
       return;
@@ -452,7 +470,7 @@ export class ETLPipeline {
     };
 
     // Store main document only
-    const documentId = await supabaseService.upsertDocument(dbDocument);
+    const documentId = await this.supabaseServiceInstance.upsertDocument(dbDocument);
     if (!documentId) {
       throw new Error(`Failed to store metadata-only document: ${apiDocument.doc_id}`);
     }
@@ -472,26 +490,122 @@ export class ETLPipeline {
     };
   }
 
-  getProgress(): ETLProgress {
-    return { ...this.progress };
+  async getStats(): Promise<{
+    databaseStats: unknown;
+    embeddingService: {
+      model: string;
+      dimension: number;
+      isReady: boolean;
+    };
+  }> {
+    return {
+      databaseStats: await this.supabaseServiceInstance.getDatabaseStats(),
+      embeddingService: {
+        model: this.embeddingServiceInstance.getModel(),
+        dimension: this.embeddingServiceInstance.getDimension(),
+        isReady: this.embeddingServiceInstance.isReady()
+      }
+    };
   }
-
-  async processingleDocument(docId: string): Promise<boolean> {
+  
+  /**
+   * Process a single document directly from a markdown file
+   * Used for the upload-first-20-documents script
+   */
+  async processDocument(processedDoc: ProcessedDocument): Promise<boolean> {
     try {
-      console.info(`Processing single hybrid document: ${docId}`);
+      console.info(`Processing document: ${processedDoc.docId}`);
       
-      const apiDocument = await this.brdrCrawler.crawlSingleDocument(docId, false);
-      if (!apiDocument) {
-        console.warn(`Document not found in API: ${docId}`);
+      // Check if document already exists
+      const existing = await this.supabaseServiceInstance.getDocumentByDocId(processedDoc.docId);
+      if (existing) {
+        console.info(`Document ${processedDoc.docId} already exists, skipping`);
         return false;
       }
-
-      await this.processHybridDocument(apiDocument, { generateEmbeddings: true });
       
-      console.info(`Successfully processed single hybrid document: ${docId}`);
+      // Create database document
+      const dbDocument: DatabaseDocument = {
+        id: uuidv4(),
+        doc_id: processedDoc.docId,
+        content: processedDoc.fullContent,
+        source: processedDoc.metadata.source,
+        embedding: undefined, // Will be updated later
+        
+        // Metadata
+        doc_uuid: processedDoc.docId,
+        doc_type_code: 'MD',
+        doc_type_desc: 'Markdown Document',
+        version_code: '1.0',
+        doc_long_title: processedDoc.title,
+        doc_desc: processedDoc.title,
+        issue_date: undefined,
+        guideline_no: undefined,
+        supersession_date: undefined,
+        topics: [],
+        concepts: [],
+        document_type: 'markdown',
+        language: 'en',
+        doc_topic_subtopic_list: [],
+        doc_keyword_list: [],
+        doc_ai_type_list: [],
+        doc_view_list: [],
+        directly_related_doc_list: [],
+        version_history_doc_list: [],
+        reference_doc_list: [],
+        superseded_doc_list: []
+      };
+      
+      // Generate embeddings for chunks
+      const chunksWithEmbeddings = await this.generateEmbeddings(processedDoc.chunks, { generateEmbeddings: true });
+      
+      // Use first chunk embedding for document
+      if (chunksWithEmbeddings.length > 0 && chunksWithEmbeddings[0].embedding) {
+        dbDocument.embedding = chunksWithEmbeddings[0].embedding;
+      }
+      
+      // Store main document
+      const documentId = await this.supabaseServiceInstance.upsertDocument(dbDocument);
+      if (!documentId) {
+        throw new Error(`Failed to store document: ${processedDoc.docId}`);
+      }
+      
+      // Create database chunks
+      const dbChunks = chunksWithEmbeddings.map((chunk) => {
+        // Extract creation date components if available
+        const creationYear = processedDoc.metadata.creationYear || undefined;
+        const creationMonth = processedDoc.metadata.creationMonth || undefined;
+        const creationDay = processedDoc.metadata.creationDay || undefined;
+        
+        return {
+          id: uuidv4(),
+          doc_id: processedDoc.docId,
+          document_id: documentId,
+          chunk_id: chunk.pageNumber,
+          content: chunk.cleanContent,
+          embedding: chunk.embedding,
+          chunk_type: chunk.metadata.chunkType,
+          keywords: chunk.metadata.keywords,
+          related_chunks: [],
+          creation_year: creationYear,
+          creation_month: creationMonth,
+          creation_day: creationDay // Note: column name is creation_date in database
+        };
+      });
+      
+      // Store chunks in batches
+      const chunkBatchSize = 50;
+      for (let i = 0; i < dbChunks.length; i += chunkBatchSize) {
+        const chunkBatch = dbChunks.slice(i, i + chunkBatchSize);
+        const success = await this.supabaseServiceInstance.insertDocumentChunks(chunkBatch);
+        if (!success) {
+          throw new Error(`Failed to store chunk batch for document: ${processedDoc.docId}`);
+        }
+      }
+      
+      console.info(`Successfully processed document: ${processedDoc.docId} with ${dbChunks.length} chunks`);
       return true;
     } catch (error) {
-      console.error(`Failed to process single hybrid document: ${docId}`, error);
+      console.error(`Error processing document: ${processedDoc.docId}`, error);
       return false;
     }
   }
@@ -501,10 +615,10 @@ export class ETLPipeline {
       console.info(`Deleting document: ${docId}`);
       
       // Delete chunks first (foreign key constraint)
-      await supabaseService.deleteDocumentChunks(docId);
+      await this.supabaseServiceInstance.deleteDocumentChunks(docId);
       
       // Delete main document
-      const success = await supabaseService.deleteDocument(docId);
+      const success = await this.supabaseServiceInstance.deleteDocument(docId);
       
       if (success) {
         console.info(`Successfully deleted document: ${docId}`);
@@ -517,24 +631,6 @@ export class ETLPipeline {
       console.error(`Error deleting document: ${docId}`, error);
       return false;
     }
-  }
-
-  async getStats(): Promise<{
-    databaseStats: unknown;
-    embeddingService: {
-      model: string;
-      dimension: number;
-      isReady: boolean;
-    };
-  }> {
-    return {
-      databaseStats: await supabaseService.getDatabaseStats(),
-      embeddingService: {
-        model: embeddingService.getModel(),
-        dimension: embeddingService.getDimension(),
-        isReady: embeddingService.isReady()
-      }
-    };
   }
 }
 

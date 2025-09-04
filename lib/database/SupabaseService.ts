@@ -4,13 +4,19 @@ import { DocumentChunk } from '../chunking/HierarchicalChunker';
 import dotenv from 'dotenv';
 dotenv.config();
 
+export interface DocumentMetadata {
+  chunkId: string;
+  pageNumber: number;
+  chunkType: string;
+}
+
 export interface DatabaseDocument {
   id: string;
   doc_id: string;
   content: string;
   source: string;
   embedding?: number[];
-  metadata?: Record<string, string>;
+  metadata?: DocumentMetadata;
   created_at?: string;
   doc_uuid?: string;
   doc_type_code?: string;
@@ -44,7 +50,7 @@ export interface DatabaseChunk {
   chunk_id: number;
   content: string;
   embedding?: number[];
-  metadata?: Record<string, string>;
+  metadata?: DocumentMetadata;
   created_at?: string;
   chunk_type?: string;
   keywords?: string[];
@@ -56,7 +62,7 @@ export interface SearchResult {
   doc_id: string;
   content: string;
   similarity: number;
-  metadata?: Record<string, string>;
+  metadata?: DocumentMetadata;
   text_match_score?: number;
   combined_score?: number;
 }
@@ -70,7 +76,7 @@ export interface AdvancedSearchResult {
   similarity: number;
   keyword_match_score: number;
   combined_score: number;
-  metadata?: Record<string, string>;
+  metadata?: DocumentMetadata;
   chunk_type?: string;
   keywords?: string[];
   is_original_match: boolean;

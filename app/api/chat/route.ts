@@ -46,7 +46,7 @@ const tools = {
     description: "Get the chunks relevant to the users question",
     inputSchema: z.object({
       question: z.string().describe('the users query to find the relevant chunks'),
-      limit: z.number().optional().default(1).describe('the number of chunks to return'),
+      limit: z.number().optional().default(10).describe('the number of chunks to return'),
     }),
     execute: async ({ question, limit }) => {
       const result = await findRelevantContent(question, limit);

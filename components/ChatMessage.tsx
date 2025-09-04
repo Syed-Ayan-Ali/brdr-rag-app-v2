@@ -219,10 +219,10 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                                   <div className="flex items-start justify-between mb-2">
                                     <button
                                       onClick={() => {
-                                        console.log('Clicking document:', chunk.doc_id, chunk.metadata.pageNumber, chunk.content.substring(0, 50));
+                                        console.log('Clicking document:', chunk.doc_id, chunk.content.substring(0, 50));
                                         handleDocumentClick(
                                           chunk.doc_id, 
-                                          chunk.metadata.pageNumber || 1, 
+                                          1, 
                                           chunk.content
                                         );
                                       }}
@@ -239,9 +239,9 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                                   </div>
                                   
                                   <div className="text-xs text-gray-600 mb-2">
-                                    <span className="font-medium">Chunk ID:</span> {chunk.metadata.chunkId} | 
+                                    {/* <span className="font-medium">Chunk ID:</span> {chunk.metadata.chunkId} | 
                                     <span className="font-medium"> Page:</span> {chunk.metadata.pageNumber} | 
-                                    <span className="font-medium"> Type:</span> {chunk.metadata.chunkType}
+                                    <span className="font-medium"> Type:</span> {chunk.metadata.chunkType} */}
                                   </div>
                                   
                                   <div className="text-xs bg-gray-50 p-2 rounded border">
@@ -257,7 +257,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                         )}
                         
                         {/* Quick PDF Access */}
-                        {output && output.length > 0 && (
+                        {/* {output && output.length > 0 && (
                           <div className="text-xs bg-indigo-50 p-3 rounded-lg border border-indigo-200">
                             <div className="font-semibold text-indigo-800 mb-2">📖 Quick PDF Access</div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -297,7 +297,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                               })()}
                             </div>
                           </div>
-                        )}
+                        )} */}
                       </div>
                     );
                   case 'output-error':

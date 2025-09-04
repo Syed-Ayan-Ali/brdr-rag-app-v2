@@ -8,6 +8,9 @@ export interface MarkdownDocument {
   subject?: string;
   creator?: string;
   creationDate?: string;
+  creationYear?: string;
+  creationMonth?: string;
+  creationDay?: string;
   pages: PageChunk[];
   fullContent: string;
   filename: string;
@@ -41,10 +44,24 @@ export interface ProcessedDocument {
     subject?: string;
     creator?: string;
     creationDate?: string;
+    creationYear?: string;
+    creationMonth?: string;
+    creationDay?: string;
     filename: string;
     totalPages: number;
     source: string;
   };
+}
+
+export interface FileMetadata {
+  title?: string;
+  author?: string;
+  subject?: string;
+  creator?: string;
+  creationDate?: string;
+  creationYear?: string;
+  creationMonth?: string;
+  creationDay?: string;
 }
 
 export class MarkdownPageChunker {
@@ -92,6 +109,9 @@ export class MarkdownPageChunker {
         subject: metadata.subject,
         creator: metadata.creator,
         creationDate: metadata.creationDate,
+        creationYear: metadata.creationYear,
+        creationMonth: metadata.creationMonth,
+        creationDay: metadata.creationDay,
         pages,
         fullContent: content,
         filename
@@ -127,6 +147,9 @@ export class MarkdownPageChunker {
         subject: document.subject,
         creator: document.creator,
         creationDate: document.creationDate,
+        creationYear: document['creationYear'],
+        creationMonth: document['creationMonth'],
+        creationDay: document['creationDay'],
         filename: document.filename,
         totalPages: document.pages.length,
         source: 'BRDR_MARKDOWN'
@@ -170,16 +193,12 @@ export class MarkdownPageChunker {
 
   /**
    * Extract metadata from the document header
+   * and parse creation date components
    */
-  private extractMetadata(content: string): {
-    title?: string;
-    author?: string;
-    subject?: string;
-    creator?: string;
-    creationDate?: string;
-  } {
+  private extractMetadata(content: string): FileMetadata
+  {
     const lines = content.split('\n');
-    const metadata: Record<string, string> = {};
+    const metadata: FileMetadata = {};
     
     // Extract title (first # heading)
     const titleMatch = content.match(/^#\s+(.+)$/m);
@@ -207,6 +226,34 @@ export class MarkdownPageChunker {
       const creationDateMatch = line.match(/\*\*Creation Date:\*\*\s*(.+)/);
       if (creationDateMatch) {
         metadata.creationDate = creationDateMatch[1].trim();
+        
+        // Try to parse the creation date
+        // Expected format: D:20161118140742+08'00' (PDF format) or other standard date format
+        try {
+          let dateStr = creationDateMatch[1].trim();
+          
+          // Handle PDF date format: D:20161118140742+08'00'
+          if (dateStr.startsWith('D:')) {
+            // Extract YYYYMMDD from D:YYYYMMDDhhmmss+zz'zz'
+            const pdfDateMatch = dateStr.match(/D:(\d{4})(\d{2})(\d{2})(\d{6})?([+-]\d{2}'\d{2}')?/);
+            if (pdfDateMatch) {
+              const [, year, month, day] = pdfDateMatch;
+              metadata['creationYear'] = year;
+              metadata['creationMonth'] = month;
+              metadata['creationDay'] = day;
+            }
+          } else {
+            // Try to parse as standard date format
+            const date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+              metadata['creationYear'] = date.getFullYear().toString();
+              metadata['creationMonth'] = (date.getMonth() + 1).toString().padStart(2, '0');
+              metadata['creationDay'] = date.getDate().toString().padStart(2, '0');
+            }
+          }
+        } catch (error) {
+          // console.error(`Failed to parse creation date: ${metadata.creationDate}`, error);
+        }
       }
     }
     
@@ -219,7 +266,7 @@ export class MarkdownPageChunker {
   private extractPages(content: string, docId: string): PageChunk[] {
     const pages: PageChunk[] = [];
     
-    // Split content by page markers (## Page X)
+    // Split content by page markers (## Page X) - using original content to preserve markers
     const pagePattern = /^## Page (\d+)$/gm;
     const pageSplits = content.split(pagePattern);
     
@@ -227,37 +274,56 @@ export class MarkdownPageChunker {
     const headerContent = pageSplits[0];
     
     // Process each page
+    let validChunkCount = 0;
+    
     for (let i = 1; i < pageSplits.length; i += 2) {
       const pageNumber = parseInt(pageSplits[i]);
       const pageContent = pageSplits[i + 1] || '';
       
-      if (pageContent.trim()) {
-        const cleanContent = this.cleanPageContent(pageContent);
-        const startIndex = content.indexOf(`## Page ${pageNumber}`);
-        const endIndex = i + 2 < pageSplits.length 
-          ? content.indexOf(`## Page ${parseInt(pageSplits[i + 2])}`)
-          : content.length;
-        
-        pages.push({
-          id: `${docId}_page_${pageNumber}`,
-          pageNumber,
-          content: pageContent.trim(),
-          cleanContent,
-          metadata: {
-            chunkId: `${docId}_page_${pageNumber}`,
-            level: 1,
-            chunkType: 'page',
-            pageNumber,
-            tokens: this.estimateTokens(cleanContent),
-            keywords: this.extractKeywords(cleanContent),
-            startIndex,
-            endIndex
-          }
-        });
+      // Skip empty chunks
+      if (!pageContent.trim() || pageContent.trim() === "") {
+        console.debug(`Skipping empty chunk for page ${pageNumber} in document ${docId}`);
+        continue;
       }
+      
+      // First clean the page content to remove unnecessary elements
+      const initialCleanContent = this.cleanPageContent(pageContent);
+      
+      // Then apply the more thorough text cleaning
+      const cleanContent = this.cleanText(initialCleanContent);
+      
+      // Skip chunks that would result in empty content after cleaning
+      if (!cleanContent.trim()) {
+        console.debug(`Skipping chunk with empty clean content for page ${pageNumber} in document ${docId}`);
+        continue;
+      }
+      
+      const startIndex = content.indexOf(`## Page ${pageNumber}`);
+      const endIndex = i + 2 < pageSplits.length 
+        ? content.indexOf(`## Page ${parseInt(pageSplits[i + 2])}`)
+        : content.length;
+      
+      validChunkCount++;
+      
+      pages.push({
+        id: `${docId}_page_${validChunkCount}`,
+        pageNumber: validChunkCount, // Use the valid chunk count instead of original page number
+        content: pageContent.trim(),
+        cleanContent,
+        metadata: {
+          chunkId: `${docId}_page_${validChunkCount}`,
+          level: 1,
+          chunkType: 'page',
+          pageNumber: validChunkCount,
+          tokens: this.estimateTokens(cleanContent),
+          keywords: this.extractKeywords(cleanContent),
+          startIndex,
+          endIndex
+        }
+      });
     }
     
-    // console.debug(`Extracted ${pages.length} pages from document ${docId}`);
+    // console.debug(`Extracted ${pages.length} valid pages from document ${docId}`);
     return pages;
   }
 
@@ -279,6 +345,48 @@ export class MarkdownPageChunker {
   }
 
   /**
+   * List of common English stop words to filter out
+   */
+  private stopWords: Set<string> = new Set([
+    'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'aren\'t', 'as', 'at',
+    'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
+    'can', 'can\'t', 'cannot', 'could', 'couldn\'t',
+    'did', 'didn\'t', 'do', 'does', 'doesn\'t', 'doing', 'don\'t', 'down', 'during',
+    'each',
+    'few', 'for', 'from', 'further',
+    'had', 'hadn\'t', 'has', 'hasn\'t', 'have', 'haven\'t', 'having', 'he', 'he\'d', 'he\'ll', 'he\'s', 'her', 'here', 'here\'s', 'hers', 'herself', 'him', 'himself', 'his', 'how', 'how\'s',
+    'i', 'i\'d', 'i\'ll', 'i\'m', 'i\'ve', 'if', 'in', 'into', 'is', 'isn\'t', 'it', 'it\'s', 'its', 'itself',
+    'let\'s',
+    'me', 'more', 'most', 'mustn\'t', 'my', 'myself',
+    'no', 'nor', 'not',
+    'of', 'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over', 'own',
+    'same', 'shan\'t', 'she', 'she\'d', 'she\'ll', 'she\'s', 'should', 'shouldn\'t', 'so', 'some', 'such',
+    'than', 'that', 'that\'s', 'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', 'there\'s', 'these', 'they', 'they\'d', 'they\'ll', 'they\'re', 'they\'ve', 'this', 'those', 'through', 'to', 'too',
+    'under', 'until', 'up',
+    'very',
+    'was', 'wasn\'t', 'we', 'we\'d', 'we\'ll', 'we\'re', 'we\'ve', 'were', 'weren\'t', 'what', 'what\'s', 'when', 'when\'s', 'where', 'where\'s', 'which', 'while', 'who', 'who\'s', 'whom', 'why', 'why\'s', 'with', 'won\'t', 'would', 'wouldn\'t',
+    'you', 'you\'d', 'you\'ll', 'you\'re', 'you\'ve', 'your', 'yours', 'yourself', 'yourselves',
+    // Common domain-specific words that might appear frequently but aren't meaningful keywords
+    'page', 'document', 'section', 'chapter', 'paragraph', 'table', 'figure', 'appendix',
+    'shall', 'must', 'may', 'should', 'would', 'could', 'will', 'also', 'however', 'therefore'
+  ]);
+
+  /**
+   * Cleans a string by removing all characters that are not
+   * alphanumeric, common punctuation, or whitespace.
+   *
+   * @param {string} text The input string to clean.
+   * @returns {string} The cleaned string.
+   */
+  private cleanText(text: string): string {
+    // Regex to match any character that is NOT a letter (a-z, A-Z),
+    // a digit (0-9), whitespace (\s), or a common punctuation mark.
+    // The ^ at the start of the character class [^...] negates the set.
+    const cleanedText = text.replace(/[^a-zA-Z0-9\s.,!?'"-]/g, "");
+    return cleanedText;
+  }
+
+  /**
    * Extract keywords from content
    */
   private extractKeywords(content: string): string[] {
@@ -287,7 +395,13 @@ export class MarkdownPageChunker {
       .toLowerCase()
       .replace(/[^\w\s]/g, ' ')
       .split(/\s+/)
-      .filter(word => word.length > 3 && word.length < 20);
+      .filter(word => 
+        word.length > 3 && 
+        word.length < 20 && 
+        !this.stopWords.has(word) && 
+        // Exclude words that are just numbers
+        !/^\d+$/.test(word)
+      );
     
     // Count word frequency
     const wordCounts: Map<string, number> = new Map();

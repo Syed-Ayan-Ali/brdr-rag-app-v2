@@ -11,14 +11,13 @@ export interface EmbeddingResult {
 export class EmbeddingService {
   private static instance: EmbeddingService;
   private readonly model: string;
-  private readonly modelDimension: number = 1536; // Azure text-embedding-3-small dimension
-  private readonly targetDimension: number;       // Target dimension for database compatibility
+  private readonly dimension: number;
   private embeddingModel;
   private isInitialized: boolean = false;
 
-  constructor(modelName: string = 'text-embedding-3-small', targetDimension: number = 384) {
+  constructor(modelName: string = 'text-embedding-3-small', dimension: number = 1536) {
     this.model = modelName;
-    this.targetDimension = targetDimension;
+    this.dimension = dimension;
     this.embeddingModel = azure.textEmbedding(modelName);
     this.isInitialized = true;
   }
@@ -41,12 +40,14 @@ export class EmbeddingService {
         value: cleanText,
       });
 
-      // Reduce dimensionality to match database requirements
-      const reducedEmbedding = this.reduceDimension(embedding);
+      // Validate embedding dimension
+      if (embedding.length !== this.dimension) {
+        console.warn(`Expected dimension ${this.dimension}, got ${embedding.length}`);
+      }
 
       return {
-        embedding: reducedEmbedding,
-        dimension: reducedEmbedding.length,
+        embedding,
+        dimension: embedding.length,
         model: this.model,
         timestamp: new Date().toISOString(),
       };
@@ -67,11 +68,8 @@ export class EmbeddingService {
         values: cleanTexts,
       });
 
-      // Reduce dimensionality of all embeddings
-      const reducedEmbeddings = embeddings.map(embedding => this.reduceDimension(embedding));
-
       // Create result objects
-      return reducedEmbeddings.map(embedding => ({
+      return embeddings.map(embedding => ({
         embedding,
         dimension: embedding.length,
         model: this.model,
@@ -82,62 +80,12 @@ export class EmbeddingService {
       
       // Return fallback embeddings in case of error
       return texts.map(() => ({
-        embedding: new Array(this.targetDimension).fill(0),
-        dimension: this.targetDimension,
+        embedding: new Array(this.dimension).fill(0),
+        dimension: this.dimension,
         model: this.model,
         timestamp: new Date().toISOString(),
       }));
     }
-  }
-
-  /**
-   * Reduces the dimensionality of an embedding vector from modelDimension to targetDimension
-   * This implementation uses a combination of techniques:
-   * 1. Uniform sampling across the vector to preserve overall distribution
-   * 2. Averaging of adjacent dimensions to retain local relationships
-   * 3. Preservation of important dimensions at the beginning of the vector
-   */
-  private reduceDimension(embedding: number[]): number[] {
-    if (embedding.length <= this.targetDimension) {
-      return embedding; // No reduction needed
-    }
-
-    // Method 1: Preserve the most important dimensions (typically at the beginning)
-    const importantCount = Math.floor(this.targetDimension * 0.3); // 30% of target dimensions
-    const importantDimensions = embedding.slice(0, importantCount);
-
-    // Method 2: Sample uniformly from the remaining dimensions
-    const remainingCount = this.targetDimension - importantCount;
-    const sampledDimensions: number[] = [];
-    
-    const step = (embedding.length - importantCount) / remainingCount;
-    for (let i = 0; i < remainingCount; i++) {
-      const index = Math.floor(importantCount + i * step);
-      
-      // Average a small window around the sampled point to retain more information
-      const windowSize = 3;
-      let sum = 0;
-      let count = 0;
-      
-      for (let j = Math.max(0, index - Math.floor(windowSize/2)); 
-           j <= Math.min(embedding.length - 1, index + Math.floor(windowSize/2)); 
-           j++) {
-        sum += embedding[j];
-        count++;
-      }
-      
-      sampledDimensions.push(sum / count);
-    }
-
-    // Combine the important dimensions with the sampled ones
-    const reducedEmbedding = [...importantDimensions, ...sampledDimensions];
-    
-    // Normalize the reduced embedding to maintain the same magnitude
-    const originalMagnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    const reducedMagnitude = Math.sqrt(reducedEmbedding.reduce((sum, val) => sum + val * val, 0));
-    const scaleFactor = originalMagnitude / reducedMagnitude;
-    
-    return reducedEmbedding.map(val => val * scaleFactor);
   }
 
   private preprocessText(text: string): string {
@@ -149,7 +97,7 @@ export class EmbeddingService {
   }
 
   getDimension(): number {
-    return this.targetDimension; // Return the target dimension that matches the database
+    return this.dimension;
   }
 
   getModel(): string {
@@ -157,7 +105,7 @@ export class EmbeddingService {
   }
 
   getModelInfo(): { modelName: string; dimension: number } {
-    return { modelName: this.model, dimension: this.targetDimension };
+    return { modelName: this.model, dimension: this.dimension };
   }
 
   isReady(): boolean {
@@ -171,8 +119,8 @@ export class EmbeddingService {
   }
 }
 
-// Export singleton instance with 384 as the target dimension to match the database
-export const embeddingService = EmbeddingService.getInstance('text-embedding-3-small', 384);
+// Export singleton instance
+export const embeddingService = EmbeddingService.getInstance();
 
 // Utility functions for direct use
 export async function generateEmbedding(message: string): Promise<number[]> {
