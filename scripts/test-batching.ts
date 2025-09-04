@@ -80,7 +80,6 @@ async function testBatching() {
 
   } catch (error) {
     console.error('\n❌ Batching test failed:', error);
-    logger.error(LogCategory.ETL, 'Batching test failed', error);
     process.exit(1);
   }
 }

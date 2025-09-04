@@ -2,7 +2,6 @@ import { BRDRCrawler, CrawledDocument } from '../../crawler/BRDRCrawler';
 import { markdownPageChunker, ProcessedDocument, PageChunk } from '../chunking/MarkdownPageChunker';
 import { embeddingService } from '../embeddings/EmbeddingService';
 import { supabaseService, DatabaseDocument, DatabaseChunk } from '../database/SupabaseService';
-import { logger, LogCategory } from '../logging/Logger';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface ETLOptions {
@@ -21,11 +20,13 @@ export interface ETLOptions {
 export interface ETLProgress {
   phase: 'crawling' | 'chunking' | 'embedding' | 'storing' | 'complete' | 'error';
   documentsProcessed: number;
+  documentsSkipped: number;
   totalDocuments: number;
   chunksCreated: number;
   embeddingsGenerated: number;
   currentDocument?: string;
   error?: string;
+  errors: string[];
   startTime: Date;
   endTime?: Date;
 }
@@ -51,9 +52,11 @@ export class ETLPipeline {
     this.progress = {
       phase: 'crawling',
       documentsProcessed: 0,
+      documentsSkipped: 0,
       totalDocuments: 0,
       chunksCreated: 0,
       embeddingsGenerated: 0,
+      errors: [],
       startTime: new Date()
     };
   }
@@ -62,8 +65,6 @@ export class ETLPipeline {
     const startTime = Date.now();
     this.progress.startTime = new Date();
     this.errors = [];
-
-    logger.info(LogCategory.ETL, 'Starting ETL pipeline', options);
 
     try {
       // Test database connection first
@@ -74,13 +75,12 @@ export class ETLPipeline {
 
       // Phase 1: Crawl metadata from BRDR API
       this.progress.phase = 'crawling';
-      logger.info(LogCategory.ETL, 'Phase 1: Crawling metadata from BRDR API');
       
       const apiDocuments = await this.crawlApiDocuments(options);
       this.progress.totalDocuments = apiDocuments.length;
       
       if (apiDocuments.length === 0) {
-        logger.warn(LogCategory.ETL, 'No documents found in BRDR API');
+        console.warn('No documents found in BRDR API');
         return this.createResult(true, startTime);
       }
 
@@ -90,7 +90,7 @@ export class ETLPipeline {
       this.progress.phase = 'complete';
       this.progress.endTime = new Date();
       
-      logger.info(LogCategory.ETL, 'ETL pipeline completed successfully', {
+      console.info('ETL pipeline completed successfully', {
         documentsProcessed: this.progress.documentsProcessed,
         chunksCreated: this.progress.chunksCreated,
         embeddingsGenerated: this.progress.embeddingsGenerated,
@@ -99,12 +99,12 @@ export class ETLPipeline {
 
       return this.createResult(true, startTime);
 
-    } catch (error) {
+    } catch (error: unknown) {
       this.progress.phase = 'error';
       this.progress.error = error instanceof Error ? error.message : 'Unknown error';
       this.progress.endTime = new Date();
       
-      logger.error(LogCategory.ETL, 'ETL pipeline failed', error);
+      console.error('ETL pipeline failed', error);
       this.errors.push(this.progress.error);
       
       return this.createResult(false, startTime);
@@ -112,7 +112,7 @@ export class ETLPipeline {
   }
 
   private async crawlApiDocuments(options: ETLOptions): Promise<CrawledDocument[]> {
-    logger.info(LogCategory.ETL, 'Starting BRDR API document crawling for metadata');
+    console.info('Starting BRDR API document crawling for metadata');
     
     // Calculate pages needed to get all documents or respect maxDocuments limit
     const maxPages = options.maxDocuments ? Math.ceil(options.maxDocuments / 20) : 999; // Use 999 to get all available pages
@@ -123,10 +123,10 @@ export class ETLPipeline {
       filterExisting: options.skipExisting || true
     });
 
-    logger.info(LogCategory.ETL, `Successfully crawled ${documents.length} documents from BRDR API`);
+    console.info(`Successfully crawled ${documents.length} documents from BRDR API`);
 
     if (options.maxDocuments && documents.length > options.maxDocuments) {
-      logger.info(LogCategory.ETL, `Limiting to ${options.maxDocuments} documents as requested`);
+      console.info(`Limiting to ${options.maxDocuments} documents as requested`);
       return documents.slice(0, options.maxDocuments);
     }
 
@@ -136,14 +136,14 @@ export class ETLPipeline {
   private async processHybridBatch(apiDocuments: CrawledDocument[], options: ETLOptions): Promise<void> {
     const processingBatchSize = options.batchSize || 10;
     const databaseBatchSize = options.databaseBatchSize || 50; // Upload to database every N documents
-    const processedDocuments: { apiDoc: CrawledDocument; markdownDoc?: ProcessedDocument; chunks?: ProcessedChunk[] }[] = [];
+    const processedDocuments: { apiDoc: CrawledDocument; markdownDoc?: ProcessedDocument; chunks?: PageChunk[] }[] = [];
     
-    logger.info(LogCategory.ETL, `Starting hybrid batch processing with database batching every ${databaseBatchSize} documents`);
+    console.info(`Starting hybrid batch processing with database batching every ${databaseBatchSize} documents`);
     
     for (let i = 0; i < apiDocuments.length; i += processingBatchSize) {
       const batch = apiDocuments.slice(i, Math.min(i + processingBatchSize, apiDocuments.length));
       
-      logger.info(LogCategory.ETL, `Processing hybrid batch ${Math.floor(i / processingBatchSize) + 1}`, {
+      console.info(`Processing hybrid batch ${Math.floor(i / processingBatchSize) + 1}`, {
         batchSize: batch.length,
         startIndex: i,
         endIndex: Math.min(i + processingBatchSize, apiDocuments.length)
@@ -161,7 +161,7 @@ export class ETLPipeline {
       // Check if we should upload to database
       if (processedDocuments.length >= databaseBatchSize || i + processingBatchSize >= apiDocuments.length) {
         const memoryBefore = process.memoryUsage();
-        logger.info(LogCategory.ETL, `Uploading batch of ${processedDocuments.length} documents to database...`, {
+        console.info(`Uploading batch of ${processedDocuments.length} documents to database...`, {
           memoryUsage: `${Math.round(memoryBefore.heapUsed / 1024 / 1024)}MB`
         });
         
@@ -176,21 +176,21 @@ export class ETLPipeline {
         }
         
         const memoryAfter = process.memoryUsage();
-        logger.info(LogCategory.ETL, `Batch upload completed. Memory freed: ${Math.round((memoryBefore.heapUsed - memoryAfter.heapUsed) / 1024 / 1024)}MB`);
+        console.info(`Batch upload completed. Memory freed: ${Math.round((memoryBefore.heapUsed - memoryAfter.heapUsed) / 1024 / 1024)}MB`);
       }
     }
   }
 
-  private async processHybridDocumentInMemory(apiDocument: CrawledDocument, options: ETLOptions): Promise<{ markdownDoc?: ProcessedDocument; chunks?: ProcessedChunk[] }> {
+  private async processHybridDocumentInMemory(apiDocument: CrawledDocument, options: ETLOptions): Promise<{ markdownDoc?: ProcessedDocument; chunks?: PageChunk[] }> {
     try {
       this.progress.currentDocument = apiDocument.doc_id;
-      logger.info(LogCategory.ETL, `Processing hybrid document in memory: ${apiDocument.doc_id}`);
+      console.info(`Processing hybrid document in memory: ${apiDocument.doc_id}`);
 
       // Check if document already exists
       if (options.skipExisting) {
         const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
         if (existing) {
-          logger.info(LogCategory.ETL, `Skipping existing document: ${apiDocument.doc_id}`);
+          console.info(`Skipping existing document: ${apiDocument.doc_id}`);
           this.progress.documentsSkipped++;
           return {};
         }
@@ -200,7 +200,7 @@ export class ETLPipeline {
       const markdownDoc = await this.findAndProcessMarkdownFile(apiDocument.doc_id);
 
       if (!markdownDoc) {
-        logger.info(LogCategory.ETL, `No markdown file found for document: ${apiDocument.doc_id}`);
+        console.info(`No markdown file found for document: ${apiDocument.doc_id}`);
         return { markdownDoc: undefined, chunks: undefined }; // Return empty result for metadata-only
       }
 
@@ -211,15 +211,15 @@ export class ETLPipeline {
 
       return { markdownDoc, chunks: chunksWithEmbeddings };
 
-    } catch (error) {
-      logger.error(LogCategory.ETL, `Error processing hybrid document in memory: ${apiDocument.doc_id}`, error);
+    } catch (error: unknown) {
+      console.error(`Error processing hybrid document in memory: ${apiDocument.doc_id}`, error);
       this.progress.errors.push(`Document ${apiDocument.doc_id}: ${error instanceof Error ? error.message : String(error)}`);
       return {};
     }
   }
 
-  private async uploadBatchToDatabase(processedDocuments: { apiDoc: CrawledDocument; markdownDoc?: ProcessedDocument; chunks?: ProcessedChunk[] }[], options: ETLOptions): Promise<void> {
-    logger.info(LogCategory.ETL, `Uploading batch of ${processedDocuments.length} documents to database`);
+  private async uploadBatchToDatabase(processedDocuments: { apiDoc: CrawledDocument; markdownDoc?: ProcessedDocument; chunks?: PageChunk[] }[], options: ETLOptions): Promise<void> {
+    console.info(`Uploading batch of ${processedDocuments.length} documents to database`);
     
     for (const { apiDoc, markdownDoc, chunks } of processedDocuments) {
       try {
@@ -233,27 +233,25 @@ export class ETLPipeline {
         
         this.progress.documentsProcessed++;
         
-      } catch (error) {
-        logger.error(LogCategory.ETL, `Error uploading document to database: ${apiDoc.doc_id}`, error);
-        if (this.progress.errors) {
-          this.progress.errors.push(`Database upload ${apiDoc.doc_id}: ${error instanceof Error ? error.message : String(error)}`);
-        }
+      } catch (error: unknown) {
+        console.error(`Error uploading document to database: ${apiDoc.doc_id}`, error);
+        this.progress.errors.push(`Database upload ${apiDoc.doc_id}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
     
-    logger.info(LogCategory.ETL, `Batch upload completed. Processed ${processedDocuments.length} documents`);
+    console.info(`Batch upload completed. Processed ${processedDocuments.length} documents`);
   }
 
   private async processHybridDocument(apiDocument: CrawledDocument, options: ETLOptions): Promise<void> {
     try {
       this.progress.currentDocument = apiDocument.doc_id;
-      logger.info(LogCategory.ETL, `Processing hybrid document: ${apiDocument.doc_id}`);
+      console.info(`Processing hybrid document: ${apiDocument.doc_id}`);
 
       // Check if document already exists
       if (options.skipExisting) {
         const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
         if (existing) {
-          logger.info(LogCategory.ETL, `Skipping existing document: ${apiDocument.doc_id}`);
+          console.info(`Skipping existing document: ${apiDocument.doc_id}`);
           this.progress.documentsProcessed++;
           return;
         }
@@ -264,7 +262,7 @@ export class ETLPipeline {
       const markdownDoc = await this.findAndProcessMarkdownFile(apiDocument.doc_id);
       
       if (!markdownDoc) {
-        logger.warn(LogCategory.ETL, `No markdown file found for document: ${apiDocument.doc_id}`);
+        console.warn(`No markdown file found for document: ${apiDocument.doc_id}`);
         // Store only metadata without chunks
         await this.storeMetadataOnly(apiDocument);
         this.progress.documentsProcessed++;
@@ -283,14 +281,14 @@ export class ETLPipeline {
       
       this.progress.documentsProcessed++;
       
-      logger.info(LogCategory.ETL, `Successfully processed hybrid document: ${apiDocument.doc_id}`, {
+      console.info(`Successfully processed hybrid document: ${apiDocument.doc_id}`, {
         chunksCreated: chunks.length,
-        embeddingsGenerated: chunksWithEmbeddings.filter(c => (c as any).embedding).length
+        embeddingsGenerated: chunksWithEmbeddings.filter(c => c.embedding).length
       });
 
     } catch (error) {
-      const errorMsg = `Failed to process hybrid document ${apiDocument.doc_id}: ${error}`;
-      logger.error(LogCategory.ETL, errorMsg, error);
+      const errorMsg = `Failed to process hybrid document ${apiDocument.doc_id}: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(errorMsg, error);
       this.errors.push(errorMsg);
     }
   }
@@ -308,11 +306,11 @@ export class ETLPipeline {
       const processedDoc = markdownPageChunker.processDocument(markdownDocument);
       this.progress.chunksCreated += processedDoc.chunks.length;
       
-      logger.debug(LogCategory.CHUNKING, `Found and processed markdown file: ${filename} with ${processedDoc.chunks.length} pages`);
+      console.debug(`Found and processed markdown file: ${filename} with ${processedDoc.chunks.length} pages`);
       
       return processedDoc;
     } catch (error) {
-      logger.debug(LogCategory.CHUNKING, `No markdown file found for doc_id: ${docId}`);
+      console.debug(`No markdown file found for doc_id: ${docId}`);
       return null;
     }
   }
@@ -325,15 +323,15 @@ export class ETLPipeline {
       return chunks;
     }
 
-    logger.debug(LogCategory.EMBEDDING, `Generating embeddings for ${chunks.length} page chunks`);
+    console.debug(`Generating embeddings for ${chunks.length} page chunks`);
     
     for (const chunk of chunks) {
       try {
         const embeddingResult = await embeddingService.generateEmbedding(chunk.cleanContent);
-        (chunk as any).embedding = embeddingResult.embedding;
+        chunk.embedding = embeddingResult.embedding;
         this.progress.embeddingsGenerated++;
       } catch (error) {
-        logger.error(LogCategory.EMBEDDING, `Failed to generate embedding for chunk: ${chunk.id}`, error);
+        console.error(`Failed to generate embedding for chunk: ${chunk.id}`, error);
         // Continue processing other chunks
       }
     }
@@ -346,7 +344,7 @@ export class ETLPipeline {
     markdownDoc: ProcessedDocument,
     chunks: PageChunk[]
   ): Promise<void> {
-    logger.debug(LogCategory.DATABASE, `Storing hybrid document: ${apiDocument.doc_id}`);
+    console.debug(`Storing hybrid document: ${apiDocument.doc_id}`);
 
     // Create database document using API metadata + markdown content
     const dbDocument: DatabaseDocument = {
@@ -354,12 +352,8 @@ export class ETLPipeline {
       doc_id: apiDocument.doc_id,
       content: markdownDoc.fullContent, // Use markdown content instead of API content
       source: apiDocument.source,
-      embedding: (chunks[0] as any)?.embedding, // Use first page embedding for document
-      metadata: {
-        ...apiDocument.metadata,
-        markdownMetadata: markdownDoc.metadata
-      },
-      
+      embedding: (chunks[0])?.embedding, // Use first page embedding for document
+
       // Rich metadata from API
       doc_uuid: apiDocument.doc_uuid,
       doc_type_code: apiDocument.doc_type_code,
@@ -370,7 +364,6 @@ export class ETLPipeline {
       issue_date: apiDocument.issue_date,
       guideline_no: apiDocument.guideline_no,
       supersession_date: apiDocument.supersession_date,
-      keywords: [...(apiDocument.metadata?.keywords || []), ...(markdownDoc.metadata.author ? [markdownDoc.metadata.author] : [])],
       topics: apiDocument.topics || [],
       concepts: apiDocument.concepts || [],
       document_type: apiDocument.document_type,
@@ -392,21 +385,15 @@ export class ETLPipeline {
     }
 
     // Create database chunks from page chunks
-    const dbChunks: DatabaseChunk[] = chunks.map((chunk) => ({
+    const dbChunks = chunks.map((chunk) => ({
       id: uuidv4(),
       doc_id: apiDocument.doc_id,
       document_id: documentId,
       chunk_id: chunk.pageNumber,
       content: chunk.cleanContent,
-      embedding: (chunk as any).embedding,
-      metadata: {
-        ...chunk.metadata,
-        pageNumber: chunk.pageNumber,
-        originalContent: chunk.content,
-        apiMetadata: apiDocument.metadata
-      },
+      embedding: chunk.embedding,
       chunk_type: 'page',
-      keywords: chunk.metadata.keywords || [],
+      keywords: chunk.metadata.keywords,
       related_chunks: []
     }));
 
@@ -420,16 +407,16 @@ export class ETLPipeline {
       }
     }
 
-    logger.debug(LogCategory.DATABASE, `Successfully stored hybrid document and ${dbChunks.length} page chunks: ${apiDocument.doc_id}`);
+    console.debug(`Successfully stored hybrid document and ${dbChunks.length} page chunks: ${apiDocument.doc_id}`);
   }
 
   private async storeMetadataOnly(apiDocument: CrawledDocument): Promise<void> {
-    logger.debug(LogCategory.DATABASE, `Storing metadata-only document: ${apiDocument.doc_id}`);
+    console.debug(`Storing metadata-only document: ${apiDocument.doc_id}`);
 
     // Check if document already exists
     const existing = await supabaseService.getDocumentByDocId(apiDocument.doc_id);
     if (existing) {
-      logger.debug(LogCategory.DATABASE, `Document already exists, skipping metadata-only storage: ${apiDocument.doc_id}`);
+      console.debug(`Document already exists, skipping metadata-only storage: ${apiDocument.doc_id}`);
       return;
     }
 
@@ -439,12 +426,7 @@ export class ETLPipeline {
       doc_id: apiDocument.doc_id,
       content: apiDocument.content || '',
       source: apiDocument.source,
-      embedding: null,
-      metadata: {
-        ...apiDocument.metadata,
-        noMarkdownFile: true
-      },
-      
+      embedding: undefined,
       // Rich metadata from API
       doc_uuid: apiDocument.doc_uuid,
       doc_type_code: apiDocument.doc_type_code,
@@ -455,7 +437,6 @@ export class ETLPipeline {
       issue_date: apiDocument.issue_date,
       guideline_no: apiDocument.guideline_no,
       supersession_date: apiDocument.supersession_date,
-      keywords: apiDocument.metadata?.keywords || [],
       topics: apiDocument.topics || [],
       concepts: apiDocument.concepts || [],
       document_type: apiDocument.document_type,
@@ -476,7 +457,7 @@ export class ETLPipeline {
       throw new Error(`Failed to store metadata-only document: ${apiDocument.doc_id}`);
     }
 
-    logger.debug(LogCategory.DATABASE, `Successfully stored metadata-only document: ${apiDocument.doc_id}`);
+    console.debug(`Successfully stored metadata-only document: ${apiDocument.doc_id}`);
   }
 
   private createResult(success: boolean, startTime: number): ETLResult {
@@ -497,27 +478,27 @@ export class ETLPipeline {
 
   async processingleDocument(docId: string): Promise<boolean> {
     try {
-      logger.info(LogCategory.ETL, `Processing single hybrid document: ${docId}`);
+      console.info(`Processing single hybrid document: ${docId}`);
       
       const apiDocument = await this.brdrCrawler.crawlSingleDocument(docId, false);
       if (!apiDocument) {
-        logger.warn(LogCategory.ETL, `Document not found in API: ${docId}`);
+        console.warn(`Document not found in API: ${docId}`);
         return false;
       }
 
       await this.processHybridDocument(apiDocument, { generateEmbeddings: true });
       
-      logger.info(LogCategory.ETL, `Successfully processed single hybrid document: ${docId}`);
+      console.info(`Successfully processed single hybrid document: ${docId}`);
       return true;
     } catch (error) {
-      logger.error(LogCategory.ETL, `Failed to process single hybrid document: ${docId}`, error);
+      console.error(`Failed to process single hybrid document: ${docId}`, error);
       return false;
     }
   }
 
   async deleteDocument(docId: string): Promise<boolean> {
     try {
-      logger.info(LogCategory.ETL, `Deleting document: ${docId}`);
+      console.info(`Deleting document: ${docId}`);
       
       // Delete chunks first (foreign key constraint)
       await supabaseService.deleteDocumentChunks(docId);
@@ -526,26 +507,28 @@ export class ETLPipeline {
       const success = await supabaseService.deleteDocument(docId);
       
       if (success) {
-        logger.info(LogCategory.ETL, `Successfully deleted document: ${docId}`);
+        console.info(`Successfully deleted document: ${docId}`);
       } else {
-        logger.error(LogCategory.ETL, `Failed to delete document: ${docId}`);
+        console.warn(`Failed to delete document: ${docId}`);
       }
       
       return success;
     } catch (error) {
-      logger.error(LogCategory.ETL, `Error deleting document: ${docId}`, error);
+      console.error(`Error deleting document: ${docId}`, error);
       return false;
     }
   }
 
   async getStats(): Promise<{
-    databaseStats: any;
-    logCounts: any;
-    embeddingService: any;
+    databaseStats: unknown;
+    embeddingService: {
+      model: string;
+      dimension: number;
+      isReady: boolean;
+    };
   }> {
     return {
       databaseStats: await supabaseService.getDatabaseStats(),
-      logCounts: logger.getLogCounts(),
       embeddingService: {
         model: embeddingService.getModel(),
         dimension: embeddingService.getDimension(),

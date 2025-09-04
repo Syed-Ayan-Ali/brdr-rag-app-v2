@@ -129,7 +129,7 @@ async function testRAG() {
 
   } catch (error) {
     console.error('\n❌ RAG System Test failed:', error);
-    logger.error(LogCategory.RAG, 'RAG test script failed', error);
+    // logger.error(LogCategory.RAG, 'RAG test script failed', error);
     process.exit(1);
   }
 }

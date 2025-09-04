@@ -10,14 +10,14 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import ChatMessage from './ChatMessage';
 import SearchBar from './SearchBar';
-import { AuditTrailManager } from '@/lib/utils/AuditTrail';
+// import { AuditTrailManager } from '@/lib/utils/AuditTrail';
 
 export default function ChatPanel() {
   // const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const auditTrailManager = useRef<AuditTrailManager>(new AuditTrailManager());
+  // const auditTrailManager = useRef<AuditTrailManager>(new AuditTrailManager());
   const currentSessionId = useRef<string>('');
   
   const { messages, sendMessage, addToolResult, status } = useChat({
@@ -31,15 +31,15 @@ export default function ChatPanel() {
   // const { messages, sendMessage, status } = useChat();
 
   // Initialize session on component mount
-  useEffect(() => {
-    currentSessionId.current = auditTrailManager.current.startSession('current_user');
+  // useEffect(() => {
+  //   currentSessionId.current = auditTrailManager.current.startSession('current_user');
     
-    // Log session start
-    auditTrailManager.current.logQueryStart(
-      'Session started',
-      currentSessionId.current
-    );
-  }, []);
+  //   // Log session start
+  //   auditTrailManager.current.logQueryStart(
+  //     'Session started',
+  //     currentSessionId.current
+  //   );
+  // }, []);
 
   // Scroll behavior for sticky header
   useEffect(() => {
@@ -71,19 +71,19 @@ export default function ChatPanel() {
   const handleSendMessage = (message: string) => {
     if (message.trim()) {
       // Log user message
-      auditTrailManager.current.logQueryStart(
-        message,
-        currentSessionId.current
-      );
+      // auditTrailManager.current.logQueryStart(
+      //   message,
+      //   currentSessionId.current
+      // );
 
-      // Log API request start
-      auditTrailManager.current.logToolCall(
-        'api_request_start',
-        { message },
-        { status: 'started' },
-        Date.now(),
-        currentSessionId.current
-      );
+      // // Log API request start
+      // auditTrailManager.current.logToolCall(
+      //   'api_request_start',
+      //   { message },
+      //   { status: 'started' },
+      //   Date.now(),
+      //   currentSessionId.current
+      // );
 
       sendMessage({ text: message });
     }
@@ -91,13 +91,13 @@ export default function ChatPanel() {
 
   const handleClarificationSelect = (option: string) => {
     // Log clarification selection
-    auditTrailManager.current.logToolCall(
-      'clarification_select',
-      { option },
-      { status: 'selected' },
-      Date.now(),
-      currentSessionId.current
-    );
+    // auditTrailManager.current.logToolCall(
+    //   'clarification_select',
+    //   { option },
+    //   { status: 'selected' },
+    //   Date.now(),
+    //   currentSessionId.current
+    // );
 
     // Send the selected option as a user message to continue the conversation
     sendMessage({ text: option });

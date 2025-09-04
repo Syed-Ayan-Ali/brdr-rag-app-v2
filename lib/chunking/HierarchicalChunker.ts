@@ -44,7 +44,7 @@ export class HierarchicalChunker {
   async chunkDocument(
     content: string,
     docId: string,
-    metadata: Record<string, any> = {}
+    metadata: Record<string, string> = {}
   ): Promise<DocumentChunk[]> {
     const chunks: DocumentChunk[] = [];
     let chunkIdCounter = 0;
@@ -138,7 +138,7 @@ export class HierarchicalChunker {
     content: string,
     docId: string,
     chunkId: number,
-    metadata: Record<string, any>
+    metadata: Record<string, string>
   ): DocumentChunk {
     const id = `${docId}_chunk_${chunkId}`;
     
@@ -166,7 +166,7 @@ export class HierarchicalChunker {
     parentId: string,
     startIndex: number,
     endIndex: number,
-    metadata: Record<string, any>
+    metadata: Record<string, string>
   ): DocumentChunk {
     const id = `${docId}_chunk_${chunkId}`;
     
@@ -195,7 +195,7 @@ export class HierarchicalChunker {
     parentId: string,
     startIndex: number,
     endIndex: number,
-    metadata: Record<string, any>
+    metadata: Record<string, string>
   ): DocumentChunk {
     const id = `${docId}_chunk_${chunkId}`;
     
@@ -224,7 +224,7 @@ export class HierarchicalChunker {
     parentId: string,
     startIndex: number,
     endIndex: number,
-    metadata: Record<string, any>
+    metadata: Record<string, string>
   ): DocumentChunk {
     const id = `${docId}_chunk_${chunkId}`;
     

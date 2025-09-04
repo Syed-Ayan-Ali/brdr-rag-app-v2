@@ -30,7 +30,7 @@ export interface MarkdownCrawledDocument {
 
 export class MarkdownCrawler {
   constructor() {
-    logger.info(LogCategory.CRAWLER, 'Markdown Crawler initialized for BRDR documents');
+    // logger.info(LogCategory.CRAWLER, 'Markdown Crawler initialized for BRDR documents');
   }
 
   /**
@@ -42,16 +42,16 @@ export class MarkdownCrawler {
   } = {}): Promise<MarkdownCrawledDocument[]> {
     const { maxDocuments = Infinity, skipExisting = true } = options;
     
-    logger.info(LogCategory.CRAWLER, 'Starting markdown document crawling', {
-      maxDocuments,
-      skipExisting
-    });
+    // logger.info(LogCategory.CRAWLER, 'Starting markdown document crawling', {
+    //   maxDocuments,
+    //   skipExisting
+    // });
 
     try {
       // Get all processed documents
       const processedDocs = markdownPageChunker.processAllDocuments();
       
-      logger.info(LogCategory.CRAWLER, `Found ${processedDocs.length} processed documents`);
+      // logger.info(LogCategory.CRAWLER, `Found ${processedDocs.length} processed documents`);
       
       // Limit documents if specified
       const docsToProcess = maxDocuments < processedDocs.length 
@@ -67,28 +67,28 @@ export class MarkdownCrawler {
           crawledDocuments.push(crawledDoc);
           
           // Log crawl result
-          logger.logCrawl({
-            timestamp: new Date().toISOString(),
-            level: 'AUDIT' as any,
-            category: LogCategory.CRAWLER,
-            message: `Crawled markdown document: ${doc.docId}`,
-            docId: doc.docId,
-            source: "BRDR_MARKDOWN",
-            status: 'success',
-            contentLength: doc.fullContent.length,
-            metadata: crawledDoc.metadata
-          });
+          // logger.logCrawl({
+          //   timestamp: new Date().toISOString(),
+          //   level: 'AUDIT' as any,
+          //   category: LogCategory.CRAWLER,
+          //   message: `Crawled markdown document: ${doc.docId}`,
+          //   docId: doc.docId,
+          //   source: "BRDR_MARKDOWN",
+          //   status: 'success',
+          //   contentLength: doc.fullContent.length,
+          //   metadata: crawledDoc.metadata
+          // });
           
         } catch (error) {
-          logger.error(LogCategory.CRAWLER, `Failed to convert document: ${doc.docId}`, error);
+          // logger.error(LogCategory.CRAWLER, `Failed to convert document: ${doc.docId}`, error);
         }
       }
       
-      logger.info(LogCategory.CRAWLER, `Successfully crawled ${crawledDocuments.length} markdown documents`);
+      // logger.info(LogCategory.CRAWLER, `Successfully crawled ${crawledDocuments.length} markdown documents`);
       return crawledDocuments;
       
     } catch (error) {
-      logger.error(LogCategory.CRAWLER, 'Error during markdown crawling', error);
+      // logger.error(LogCategory.CRAWLER, 'Error during markdown crawling', error);
       throw error;
     }
   }
@@ -98,25 +98,25 @@ export class MarkdownCrawler {
    */
   async crawlSingleDocument(docId: string): Promise<MarkdownCrawledDocument | null> {
     try {
-      logger.info(LogCategory.CRAWLER, `Crawling single document: ${docId}`);
+      // logger.info(LogCategory.CRAWLER, `Crawling single document: ${docId}`);
       
       // Find the document file
       const filename = `${docId}.md`;
       const document = markdownPageChunker.parseMarkdownFile(filename);
       
       if (!document) {
-        logger.warn(LogCategory.CRAWLER, `Document not found: ${docId}`);
+        // logger.warn(LogCategory.CRAWLER, `Document not found: ${docId}`);
         return null;
       }
       
       const processedDoc = markdownPageChunker.processDocument(document);
       const crawledDoc = this.convertToCrawledDocument(processedDoc);
       
-      logger.info(LogCategory.CRAWLER, `Successfully crawled single document: ${docId}`);
+      // logger.info(LogCategory.CRAWLER, `Successfully crawled single document: ${docId}`);
       return crawledDoc;
       
     } catch (error) {
-      logger.error(LogCategory.CRAWLER, `Error crawling single document: ${docId}`, error);
+      // logger.error(LogCategory.CRAWLER, `Error crawling single document: ${docId}`, error);
       return null;
     }
   }
@@ -268,18 +268,18 @@ export class MarkdownCrawler {
    */
   private validateDocument(doc: ProcessedDocument): boolean {
     if (!doc.docId || !doc.title || !doc.fullContent) {
-      logger.warn(LogCategory.CRAWLER, `Invalid document: missing required fields`, {
-        docId: doc.docId,
-        hasTitle: !!doc.title,
-        hasContent: !!doc.fullContent
-      });
+      // logger.warn(LogCategory.CRAWLER, `Invalid document: missing required fields`, {
+      //   docId: doc.docId,
+      //   hasTitle: !!doc.title,
+      //   hasContent: !!doc.fullContent
+      // });
       return false;
     }
     
     if (doc.chunks.length === 0) {
-      logger.warn(LogCategory.CRAWLER, `Invalid document: no chunks found`, {
-        docId: doc.docId
-      });
+      // logger.warn(LogCategory.CRAWLER, `Invalid document: no chunks found`, {
+      //   docId: doc.docId
+      // });
       return false;
     }
     

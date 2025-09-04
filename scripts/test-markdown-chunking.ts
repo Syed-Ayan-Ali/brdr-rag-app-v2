@@ -110,7 +110,6 @@ async function testMarkdownChunking() {
 
   } catch (error) {
     console.error('\n❌ Markdown chunking test failed:', error);
-    logger.error(LogCategory.CHUNKING, 'Chunking test failed', error);
     process.exit(1);
   }
 }

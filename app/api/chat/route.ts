@@ -1,9 +1,8 @@
-import { google } from '@ai-sdk/google';
-import { openai } from '@ai-sdk/openai';
+import { myProvider } from '@/lib/ai/providers';
 import { convertToModelMessages, streamText, generateText, UIMessage, stepCountIs, InvalidToolInputError, NoSuchToolError, tool, ToolSet, InferUITools, UIDataTypes } from 'ai';
 import { z } from 'zod';
 // import { RAGOrchestratorFactory } from '@/lib/RAGOrchestrator';
-import { logger, LogCategory } from '../../../lib/logging/Logger';
+// import { logger, LogCategory } from '../../../lib/logging/Logger';
 import { findRelevantContent } from '@/lib/actions/findRelevantContent';
 import { getDateAndTimeFromQuery } from '@/lib/actions/getDateAndTimeFromQuery';
 
@@ -105,7 +104,7 @@ export async function POST(req: Request) {
   // console.log(JSON.stringify(result, null, 2));
 
   const result = streamText({
-    model: google(model),
+    model: myProvider.languageModel('azure-lm-model'),
     providerOptions: {
       google: {
         safetySettings: [
@@ -375,25 +374,6 @@ export async function POST(req: Request) {
   // Log API request end
   const endTime = Date.now();
   const totalResponseTime = endTime - startTime;
-  logger.info(LogCategory.API, `API request end: ${requestId}`, {
-    requestId,
-    totalResponseTime,
-    status: 'success'
-  });
-
-  // Log LLM response
-  logger.logLLM({
-    timestamp: new Date().toISOString(),
-    level: 'AUDIT' as any,
-    category: LogCategory.LLM,
-    message: `LLM response for request: ${requestId}`,
-    model: model,
-    prompt: (messages[messages.length - 1] as any)?.content || '',
-    response: 'Streaming response',
-    tokens: 0, // Will be calculated when response is complete
-    cost: 0, // Will be calculated when response is complete
-    latency: totalResponseTime
-  });
 
   return result.toUIMessageStreamResponse();
 }

@@ -43,7 +43,6 @@ async function checkTotalDocuments() {
     
   } catch (error) {
     console.error('❌ Error checking document count:', error);
-    logger.error(LogCategory.CRAWLER, 'Failed to check document count', error);
     process.exit(1);
   }
 }

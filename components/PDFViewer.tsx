@@ -82,7 +82,7 @@ export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps
               <div className="text-xs text-yellow-700 bg-yellow-100 p-3 rounded border-l-4 border-yellow-400">
                 <div className="font-medium mb-1">Content Preview:</div>
                 <div className="italic leading-relaxed">
-                  "{doc.chunkText.substring(0, 300)}{doc.chunkText.length > 300 ? '...' : ''}"
+                  &quot;{doc.chunkText.substring(0, 300)}{doc.chunkText.length > 300 ? '...' : ''}&quot;
                 </div>
               </div>
               <div className="mt-2 text-xs text-yellow-600">
@@ -128,7 +128,7 @@ export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps
                      📍 Look for this text on page {doc.pageNumber}:
                    </div>
                    <div className="text-xs text-yellow-700 italic">
-                     "{doc.chunkText.substring(0, 100)}{doc.chunkText.length > 100 ? '...' : ''}"
+                     &quot;{doc.chunkText.substring(0, 100)}{doc.chunkText.length > 100 ? '...' : ''}&quot;
                    </div>
                  </div>
                </div>
@@ -141,7 +141,7 @@ export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps
                 <div className="font-medium text-blue-700 mb-1">🔍 Search Tips:</div>
                 <div className="space-y-1">
                   <div>• Use Ctrl+F (Windows) or Cmd+F (Mac) to search within the PDF</div>
-                  <div>• Look for: "{doc.chunkText.split(' ').slice(0, 5).join(' ')}..."</div>
+                  <div>• Look for: &quot;{doc.chunkText.split(' ').slice(0, 5).join(' ')}...&quot;</div>
                 </div>
               </div>
               

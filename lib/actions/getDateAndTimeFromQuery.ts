@@ -1,4 +1,3 @@
-import { logger, LogCategory } from '../logging/Logger';
 import { generateText } from 'ai';
 import { google } from '@ai-sdk/google';
 

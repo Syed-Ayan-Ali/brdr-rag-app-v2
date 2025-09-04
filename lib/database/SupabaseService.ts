@@ -10,7 +10,7 @@ export interface DatabaseDocument {
   content: string;
   source: string;
   embedding?: number[];
-  metadata?: any;
+  metadata?: Record<string, string>;
   created_at?: string;
   doc_uuid?: string;
   doc_type_code?: string;
@@ -27,14 +27,14 @@ export interface DatabaseDocument {
   summary?: string;
   document_type?: string;
   language?: string;
-  doc_topic_subtopic_list?: any;
-  doc_keyword_list?: any;
-  doc_ai_type_list?: any;
-  doc_view_list?: any;
-  directly_related_doc_list?: any;
-  version_history_doc_list?: any;
-  reference_doc_list?: any;
-  superseded_doc_list?: any;
+  doc_topic_subtopic_list?: string[];
+  doc_keyword_list?: string[];
+  doc_ai_type_list?: string[];
+  doc_view_list?: string[];
+  directly_related_doc_list?: string[];
+  version_history_doc_list?: string[];
+  reference_doc_list?: string[];
+  superseded_doc_list?: string[];
 }
 
 export interface DatabaseChunk {
@@ -44,7 +44,7 @@ export interface DatabaseChunk {
   chunk_id: number;
   content: string;
   embedding?: number[];
-  metadata?: any;
+  metadata?: Record<string, string>;
   created_at?: string;
   chunk_type?: string;
   keywords?: string[];
@@ -56,7 +56,7 @@ export interface SearchResult {
   doc_id: string;
   content: string;
   similarity: number;
-  metadata?: any;
+  metadata?: Record<string, string>;
   text_match_score?: number;
   combined_score?: number;
 }
@@ -275,7 +275,7 @@ export class SupabaseService {
             return null;
         } else{
                 // Map the results to match the expected SearchResult format
-                return data.map((item: any) => ({
+                return data.map((item: Record<string, string>) => ({
                         id: item.id,
                         doc_id: item.doc_id,
                         content: item.content,
@@ -308,7 +308,7 @@ export class SupabaseService {
         return null;
         
       } else {
-        return data.map((item: any) => ({
+        return data.map((item: Record<string, string>) => ({
           id: item.id,
           doc_id: item.doc_id,
           content: item.content,
@@ -324,122 +324,122 @@ export class SupabaseService {
      }
   }
 
-  async hybridSearch(
-    queryText: string,
-    queryEmbedding: number[],
-    options: SearchOptions = {}
-  ): Promise<SearchResult[]> {
-    const {
-      similarity_threshold = 0.5,
-      match_count = 10
-    } = options;
+  // async hybridSearch(
+  //   queryText: string,
+  //   queryEmbedding: number[],
+  //   options: SearchOptions = {}
+  // ): Promise<SearchResult[]> {
+  //   const {
+  //     similarity_threshold = 0.5,
+  //     match_count = 10
+  //   } = options;
 
-    try {
-      // For simplicity, we'll just use the vector search
-      // This is a bare-bones approach that only uses embeddings
-      console.log('Using simple vector search instead of hybrid search');
-      const result = await this.vectorSearch(queryEmbedding, {
-        similarity_threshold,
-        match_count
-      });
+  //   try {
+  //     // For simplicity, we'll just use the vector search
+  //     // This is a bare-bones approach that only uses embeddings
+  //     console.log('Using simple vector search instead of hybrid search');
+  //     const result = await this.vectorSearch(queryEmbedding, {
+  //       similarity_threshold,
+  //       match_count
+  //     });
       
-      // Check if the result is an error object
-      if (result && typeof result === 'object' && 'error' in result && 'type' in result) {
-        console.error('Hybrid search vector search error:', result.error);
-        return [];
-      }
+  //     // Check if the result is an error object
+  //     if (result && typeof result === 'object' && 'error' in result && 'type' in result) {
+  //       console.error('Hybrid search vector search error:', result.error);
+  //       return [];
+  //     }
       
-      return result as SearchResult[];
-    } catch (error) {
-      console.error('Hybrid search exception:', error);
-      return [];
-    }
-  }
+  //     return result as SearchResult[];
+  //   } catch (error) {
+  //     console.error('Hybrid search exception:', error);
+  //     return [];
+  //   }
+  // }
 
-  async keywordSearch(
-    queryText: string,
-    options: SearchOptions = {}
-  ): Promise<SearchResult[]> {
-    const { match_count = 10 } = options;
+  // async keywordSearch(
+  //   queryText: string,
+  //   options: SearchOptions = {}
+  // ): Promise<SearchResult[]> {
+  //   const { match_count = 10 } = options;
 
-    try {
-      // Use RPC function for better text search handling
-      try {
-        const { data, error } = await this.supabase.rpc('text_search', {
-          query_text: queryText,
-          match_count
-        });
+  //   try {
+  //     // Use RPC function for better text search handling
+  //     try {
+  //       const { data, error } = await this.supabase.rpc('text_search', {
+  //         query_text: queryText,
+  //         match_count
+  //       });
 
-        if (!error && data) {
-          return data.map((item: any) => ({
-            id: item.id,
-            doc_id: item.doc_id,
-            content: item.content,
-            similarity: 0, // No similarity score for keyword search
-            metadata: item.metadata,
-            text_match_score: item.text_score || 0
-          }));
-        }
-      } catch (rpcError) {
-        console.log('RPC text search not available, using fallback');
-      }
+  //       if (!error && data) {
+  //         return data.map((item: any) => ({
+  //           id: item.id,
+  //           doc_id: item.doc_id,
+  //           content: item.content,
+  //           similarity: 0, // No similarity score for keyword search
+  //           metadata: item.metadata,
+  //           text_match_score: item.text_score || 0
+  //         }));
+  //       }
+  //     } catch (rpcError) {
+  //       console.log('RPC text search not available, using fallback');
+  //     }
 
-      // Fallback to simple content matching
-      const { data, error } = await this.supabase
-        .from('brdr_documents_data')
-        .select('id, doc_id, content, metadata')
-        .ilike('content', `%${queryText}%`)
-        .limit(match_count);
+  //     // Fallback to simple content matching
+  //     const { data, error } = await this.supabase
+  //       .from('brdr_documents_data')
+  //       .select('id, doc_id, content, metadata')
+  //       .ilike('content', `%${queryText}%`)
+  //       .limit(match_count);
 
-      if (error) {
-        console.error('Keyword search error:', error);
-        return [];
-      }
+  //     if (error) {
+  //       console.error('Keyword search error:', error);
+  //       return [];
+  //     }
 
-      return (data || []).map(item => ({
-        id: item.id,
-        doc_id: item.doc_id,
-        content: item.content,
-        similarity: 0, // No similarity score for keyword search
-        metadata: item.metadata
-      }));
-    } catch (error) {
-      console.error('Keyword search exception:', error);
-      return [];
-    }
-  }
+  //     return (data || []).map(item => ({
+  //       id: item.id,
+  //       doc_id: item.doc_id,
+  //       content: item.content,
+  //       similarity: 0, // No similarity score for keyword search
+  //       metadata: item.metadata
+  //     }));
+  //   } catch (error) {
+  //     console.error('Keyword search exception:', error);
+  //     return [];
+  //   }
+  // }
 
-  async advancedRAGSearch(
-    queryText: string,
-    queryEmbedding: number[],
-    options: AdvancedSearchOptions = {}
-  ): Promise<AdvancedSearchResult[]> {
-    const {
-      similarity_threshold = 0.7,
-      match_count = 3,
-      context_window = 2
-    } = options;
+  // async advancedRAGSearch(
+  //   queryText: string,
+  //   queryEmbedding: number[],
+  //   options: AdvancedSearchOptions = {}
+  // ): Promise<AdvancedSearchResult[]> {
+  //   const {
+  //     similarity_threshold = 0.7,
+  //     match_count = 3,
+  //     context_window = 2
+  //   } = options;
 
-    try {
-      const { data, error } = await this.supabase.rpc('advanced_rag_search', {
-        query_text: queryText,
-        query_embedding: queryEmbedding,
-        similarity_threshold,
-        match_count,
-        context_window
-      });
+  //   try {
+  //     const { data, error } = await this.supabase.rpc('advanced_rag_search', {
+  //       query_text: queryText,
+  //       query_embedding: queryEmbedding,
+  //       similarity_threshold,
+  //       match_count,
+  //       context_window
+  //     });
 
-      if (error) {
-        console.error('Advanced RAG search error:', error);
-        return [];
-      }
+  //     if (error) {
+  //       console.error('Advanced RAG search error:', error);
+  //       return [];
+  //     }
 
-      return data || [];
-    } catch (error) {
-      console.error('Advanced RAG search exception:', error);
-      return [];
-    }
-  }
+  //     return data || [];
+  //   } catch (error) {
+  //     console.error('Advanced RAG search exception:', error);
+  //     return [];
+  //   }
+  // }
 
   async getDocumentChunks(docId: string): Promise<DatabaseChunk[]> {
     try {

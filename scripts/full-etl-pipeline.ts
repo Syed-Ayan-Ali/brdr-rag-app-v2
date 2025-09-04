@@ -101,7 +101,6 @@ async function runFullETLPipeline() {
 
   } catch (error) {
     console.error('\n❌ ETL Pipeline failed:', error);
-    logger.error(LogCategory.ETL, 'ETL Pipeline script failed', error);
     process.exit(1);
   }
 }

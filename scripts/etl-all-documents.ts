@@ -102,11 +102,8 @@ async function runFullETLPipeline() {
     console.log(`    - Status: Ready`);
 
     // Show logging statistics
-    const logStats = logger.getStatistics();
-    console.log('  📝 Logging Statistics:');
-    console.log(`    - Total logs: ${logStats.totalLogs}`);
-    console.log(`    - Crawl logs: ${logStats.crawlLogs}`);
-    console.log(`    - API logs: ${logStats.apiLogs}`);
+    // const logStats = logger.getStatistics();
+    // logger.error(LogCategory.ETL, 'Complete ETL pipeline failed', error);
 
     console.log('\n🎉 Complete ETL Pipeline finished successfully!');
     console.log('📌 All BRDR documents are now ready for RAG queries.');
@@ -114,7 +111,7 @@ async function runFullETLPipeline() {
 
   } catch (error) {
     console.error('\n❌ ETL Pipeline failed:', error);
-    logger.error(LogCategory.ETL, 'Complete ETL pipeline failed', error);
+    // logger.error(LogCategory.ETL, 'Complete ETL pipeline failed', error);
     process.exit(1);
   }
 }

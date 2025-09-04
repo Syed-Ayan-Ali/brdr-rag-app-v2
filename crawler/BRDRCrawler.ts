@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { logger, LogCategory } from '../lib/logging/Logger';
+// import { logger, LogCategory } from '../lib/logging/Logger';
 
 // BRDR API configuration
 const API_URL = "https://brdr.hkma.gov.hk/restapi/doc-search";
@@ -114,12 +114,12 @@ export interface CrawledDocument {
 
 export class BRDRCrawler {
   constructor() {
-    logger.info(LogCategory.CRAWLER, 'BRDR Crawler initialized (PDF parsing disabled)');
+    // logger.info(LogCategory.CRAWLER, 'BRDR Crawler initialized (PDF parsing disabled)');
   }
 
   async fetchBRDRPage(pageNumber: number): Promise<{ documents: BRDRDocument[], totalRecords: number }> {
     const startTime = Date.now();
-    logger.info(LogCategory.CRAWLER, `Fetching BRDR page ${pageNumber}...`);
+    // logger.info(LogCategory.CRAWLER, `Fetching BRDR page ${pageNumber}...`);
     
     const headers = {
       "Content-Type": "application/json; charset=UTF-8",
@@ -140,7 +140,7 @@ export class BRDRCrawler {
       ]
     };
 
-    logger.debug(LogCategory.CRAWLER, 'API request payload', payload);
+    // logger.debug(LogCategory.CRAWLER, 'API request payload', payload);
 
     try {
       const response = await axios.post(API_URL, payload, { 
@@ -154,13 +154,13 @@ export class BRDRCrawler {
       const data = response.data;
       const duration = Date.now() - startTime;
       
-      logger.info(LogCategory.CRAWLER, `BRDR API response received: ${data.resultList?.length || 0} documents, ${data.totalRecordNumber || 0} total records`, {
-        pageNumber,
-        documentsCount: data.resultList?.length || 0,
-        totalRecords: data.totalRecordNumber || 0,
-        statusCode: response.status,
-        duration
-      });
+      // logger.info(LogCategory.CRAWLER, `BRDR API response received: ${data.resultList?.length || 0} documents, ${data.totalRecordNumber || 0} total records`, {
+      //   pageNumber,
+      //   documentsCount: data.resultList?.length || 0,
+      //   totalRecords: data.totalRecordNumber || 0,
+      //   statusCode: response.status,
+      //   duration
+      // });
       
       return {
         documents: data.resultList || [],
@@ -168,16 +168,16 @@ export class BRDRCrawler {
       };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.error(LogCategory.CRAWLER, `Failed to fetch page ${pageNumber}`, error, {
-        pageNumber,
-        duration
-      });
+      // logger.error(LogCategory.CRAWLER, `Failed to fetch page ${pageNumber}`, error, {
+      //   pageNumber,
+      //   duration
+      // });
       throw error;
     }
   }
 
   formatDocumentContent(doc: BRDRDocument): string {
-    logger.debug(LogCategory.CRAWLER, `Formatting document content for: ${doc.docId}`);
+    // logger.debug(LogCategory.CRAWLER, `Formatting document content for: ${doc.docId}`);
     
     const topics = doc.docTopicSubtopicList
       ?.map(t => `${t.topicDesc || 'N/A'} - ${t.subtopicDesc || 'N/A'}`)
@@ -190,31 +190,31 @@ export class BRDRCrawler {
       `Topics: ${topics}`
     ].join('\n');
 
-    logger.debug(LogCategory.CRAWLER, `Document formatted: ${formattedContent.length} characters`);
+    // logger.debug(LogCategory.CRAWLER, `Document formatted: ${formattedContent.length} characters`);
 
     return formattedContent;
   }
 
   validateDocument(doc: BRDRDocument): boolean {
-    logger.debug(LogCategory.CRAWLER, `Validating document: ${doc.docId}`);
+    // logger.debug(LogCategory.CRAWLER, `Validating document: ${doc.docId}`);
     
     const requiredFields = ["docId", "docLongTitle"];
     for (const field of requiredFields) {
       if (!doc[field]) {
-        logger.warn(LogCategory.CRAWLER, `Invalid document: Missing ${field} in ${doc.docId}`);
+        // logger.warn(LogCategory.CRAWLER, `Invalid document: Missing ${field} in ${doc.docId}`);
         return false;
       }
     }
     
-    logger.debug(LogCategory.CRAWLER, `Document validation passed: ${doc.docId}`);
+    // logger.debug(LogCategory.CRAWLER, `Document validation passed: ${doc.docId}`);
     return true;
   }
 
   async convertPDFToMarkdown(docId: string): Promise<string> {
-    logger.debug(LogCategory.CRAWLER, `PDF conversion requested for: ${docId}`);
+    // logger.debug(LogCategory.CRAWLER, `PDF conversion requested for: ${docId}`);
     
     // PDF parsing is disabled for now
-    logger.debug(LogCategory.CRAWLER, `PDF parsing disabled for ${docId}`);
+    // logger.debug(LogCategory.CRAWLER, `PDF parsing disabled for ${docId}`);
     return "";
   }
 
@@ -223,7 +223,7 @@ export class BRDRCrawler {
     includePDFContent?: boolean;
     filterExisting?: boolean;
   } = {}): Promise<CrawledDocument[]> {
-    logger.info(LogCategory.CRAWLER, 'Starting BRDR document crawling', options);
+    // logger.info(LogCategory.CRAWLER, 'Starting BRDR document crawling', options);
     
     const {
       maxPages = Infinity,
@@ -236,26 +236,26 @@ export class BRDRCrawler {
     let totalRecords = 0;
 
     while (pageNumber <= maxPages) {
-      logger.info(LogCategory.CRAWLER, `Fetching page ${pageNumber}...`);
+      // logger.info(LogCategory.CRAWLER, `Fetching page ${pageNumber}...`);
       
       try {
         const { documents: pageDocuments, totalRecords: total } = await this.fetchBRDRPage(pageNumber);
         
         if (pageNumber === 1) {
           totalRecords = total;
-          logger.info(LogCategory.CRAWLER, `Total records to fetch: ${totalRecords}`);
+          // logger.info(LogCategory.CRAWLER, `Total records to fetch: ${totalRecords}`);
         }
 
         if (!pageDocuments || pageDocuments.length === 0) {
-          logger.info(LogCategory.CRAWLER, "No more documents to fetch.");
+          // logger.info(LogCategory.CRAWLER, "No more documents to fetch.");
           break;
         }
 
-        logger.info(LogCategory.CRAWLER, `Processing ${pageDocuments.length} documents from page ${pageNumber}`);
+        // logger.info(LogCategory.CRAWLER, `Processing ${pageDocuments.length} documents from page ${pageNumber}`);
 
         for (const doc of pageDocuments) {
           if (!this.validateDocument(doc)) {
-            logger.warn(LogCategory.CRAWLER, `Skipping invalid document ${doc.docId}`);
+            // logger.warn(LogCategory.CRAWLER, `Skipping invalid document ${doc.docId}`);
             continue;
           }
 
@@ -263,7 +263,7 @@ export class BRDRCrawler {
           let pdfContent: string | undefined;
 
           if (includePDFContent) {
-            logger.debug(LogCategory.CRAWLER, `Converting PDF for document ${doc.docId}...`);
+            // logger.debug(LogCategory.CRAWLER, `Converting PDF for document ${doc.docId}...`);
             pdfContent = await this.convertPDFToMarkdown(doc.docId);
           }
 
@@ -315,32 +315,32 @@ export class BRDRCrawler {
           documents.push(crawledDoc);
           
           // Log crawl result
-          logger.logCrawl({
-            timestamp: new Date().toISOString(),
-            level: 'AUDIT' as any,
-            category: LogCategory.CRAWLER,
-            message: `Crawled document: ${doc.docId}`,
-            docId: doc.docId,
-            source: "BRDRAPI",
-            status: 'success',
-            contentLength: content.length,
+          // logger.logCrawl({
+          //   timestamp: new Date().toISOString(),
+          //   level: 'AUDIT' as any,
+          //   category: LogCategory.CRAWLER,
+          //   message: `Crawled document: ${doc.docId}`,
+          //   docId: doc.docId,
+          //   source: "BRDRAPI",
+          //   status: 'success',
+          //   contentLength: content.length,
             
-          });
+          // });
         }
 
         pageNumber++;
         
         if ((pageNumber - 1) * PAGE_SIZE >= totalRecords) {
-          logger.info(LogCategory.CRAWLER, "All pages fetched.");
+          // logger.info(LogCategory.CRAWLER, "All pages fetched.");
           break;
         }
       } catch (error) {
-        logger.error(LogCategory.CRAWLER, `Error fetching page ${pageNumber}`, error);
+        // logger.error(LogCategory.CRAWLER, `Error fetching page ${pageNumber}`, error);
         pageNumber++;
       }
     }
 
-    logger.info(LogCategory.CRAWLER, `Crawling completed. Found ${documents.length} documents.`);
+    // logger.info(LogCategory.CRAWLER, `Crawling completed. Found ${documents.length} documents.`);
     return documents;
   }
 
@@ -371,7 +371,7 @@ export class BRDRCrawler {
       const doc = documents.find(d => d.docId === docId);
       
       if (!doc || !this.validateDocument(doc)) {
-        logger.warn(LogCategory.CRAWLER, `Document ${docId} not found or invalid`);
+        // logger.warn(LogCategory.CRAWLER, `Document ${docId} not found or invalid`);
         return null;
       }
 
@@ -379,7 +379,7 @@ export class BRDRCrawler {
       let pdfContent: string | undefined;
 
       if (includePDFContent) {
-        logger.debug(LogCategory.CRAWLER, `Converting PDF for document ${docId}...`);
+        // logger.debug(LogCategory.CRAWLER, `Converting PDF for document ${docId}...`);
         pdfContent = await this.convertPDFToMarkdown(docId);
       }
 
@@ -425,7 +425,7 @@ export class BRDRCrawler {
         language: 'en'
       };
     } catch (error) {
-      logger.error(LogCategory.CRAWLER, `Error crawling single document ${docId}`, error);
+      // logger.error(LogCategory.CRAWLER, `Error crawling single document ${docId}`, error);
       return null;
     }
   }

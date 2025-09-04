@@ -1,6 +1,5 @@
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { logger, LogCategory } from '../logging/Logger';
 
 export interface MarkdownDocument {
   docId: string;
@@ -29,6 +28,7 @@ export interface PageChunk {
     startIndex: number;
     endIndex: number;
   };
+  embedding?: number[];
 }
 
 export interface ProcessedDocument {
@@ -63,10 +63,10 @@ export class MarkdownPageChunker {
         .filter(file => file.endsWith('.md'))
         .sort(); // Sort to ensure consistent processing order
       
-      logger.info(LogCategory.CHUNKING, `Found ${files.length} markdown files in ${this.brdrMdPath}`);
+      // console.info(`Found ${files.length} markdown files in ${this.brdrMdPath}`);
       return files;
     } catch (error) {
-      logger.error(LogCategory.CHUNKING, `Error reading markdown directory: ${this.brdrMdPath}`, error);
+      // console.error(`Error reading markdown directory: ${this.brdrMdPath}`, error);
       return [];
     }
   }
@@ -79,7 +79,7 @@ export class MarkdownPageChunker {
       const filePath = join(this.brdrMdPath, filename);
       const content = readFileSync(filePath, 'utf-8');
       
-      logger.debug(LogCategory.CHUNKING, `Parsing markdown file: ${filename}`);
+      // console.debug(`Parsing markdown file: ${filename}`);
       
       const docId = this.extractDocIdFromFilename(filename);
       const metadata = this.extractMetadata(content);
@@ -97,7 +97,7 @@ export class MarkdownPageChunker {
         filename
       };
     } catch (error) {
-      logger.error(LogCategory.CHUNKING, `Error parsing markdown file: ${filename}`, error);
+      // console.error(`Error parsing markdown file: ${filename}`, error);
       return null;
     }
   }
@@ -106,7 +106,7 @@ export class MarkdownPageChunker {
    * Process a single document into chunks
    */
   processDocument(document: MarkdownDocument): ProcessedDocument {
-    logger.debug(LogCategory.CHUNKING, `Processing document: ${document.docId}`);
+    // console.debug(`Processing document: ${document.docId}`);
     
     const chunks = document.pages.map((page, index) => ({
       ...page,
@@ -141,7 +141,7 @@ export class MarkdownPageChunker {
     const files = this.getAllMarkdownFiles();
     const processedDocuments: ProcessedDocument[] = [];
     
-    logger.info(LogCategory.CHUNKING, `Processing ${files.length} markdown documents`);
+    // console.info(`Processing ${files.length} markdown documents`);
     
     for (const filename of files) {
       try {
@@ -150,14 +150,14 @@ export class MarkdownPageChunker {
           const processed = this.processDocument(document);
           processedDocuments.push(processed);
           
-          logger.debug(LogCategory.CHUNKING, `Processed ${filename}: ${processed.chunks.length} pages`);
+          // console.debug(`Processed ${filename}: ${processed.chunks.length} pages`);
         }
       } catch (error) {
-        logger.error(LogCategory.CHUNKING, `Failed to process ${filename}`, error);
+        // console.error(`Failed to process ${filename}`, error);
       }
     }
     
-    logger.info(LogCategory.CHUNKING, `Successfully processed ${processedDocuments.length} documents`);
+    // console.info(`Successfully processed ${processedDocuments.length} documents`);
     return processedDocuments;
   }
 
@@ -179,7 +179,7 @@ export class MarkdownPageChunker {
     creationDate?: string;
   } {
     const lines = content.split('\n');
-    const metadata: any = {};
+    const metadata: Record<string, string> = {};
     
     // Extract title (first # heading)
     const titleMatch = content.match(/^#\s+(.+)$/m);
@@ -224,7 +224,7 @@ export class MarkdownPageChunker {
     const pageSplits = content.split(pagePattern);
     
     // First element is the header content before first page
-    let headerContent = pageSplits[0];
+    const headerContent = pageSplits[0];
     
     // Process each page
     for (let i = 1; i < pageSplits.length; i += 2) {
@@ -257,7 +257,7 @@ export class MarkdownPageChunker {
       }
     }
     
-    logger.debug(LogCategory.CHUNKING, `Extracted ${pages.length} pages from document ${docId}`);
+    // console.debug(`Extracted ${pages.length} pages from document ${docId}`);
     return pages;
   }
 

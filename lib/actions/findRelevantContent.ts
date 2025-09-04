@@ -1,6 +1,6 @@
 import { embeddingService } from '../embeddings/EmbeddingService';
 import { supabaseService } from '../database/SupabaseService';
-import { logger, LogCategory } from '../logging/Logger';
+// import { logger, LogCategory } from '../logging/Logger';
 
 /**
  * Enhanced function that performs vector search with optional date filtering
@@ -11,7 +11,7 @@ import { logger, LogCategory } from '../logging/Logger';
  */
 export const findRelevantContent = async (userQuery: string, limit: number) => {
   try {
-    logger.info(LogCategory.SEARCH, `Finding relevant content for query: "${userQuery}"`);
+    // logger.info(LogCategory.SEARCH, `Finding relevant content for query: "${userQuery}"`);
    
     // Step 1: Generate embedding for the user query
     const embeddingResult = await embeddingService.generateEmbedding(userQuery);
@@ -38,7 +38,7 @@ export const findRelevantContent = async (userQuery: string, limit: number) => {
 
     // Step 4: Combine and process results
     if (vectorResults === null && keywordResults === null) {
-      logger.warn(LogCategory.SEARCH, 'No results found from any search method');
+      // logger.warn(LogCategory.SEARCH, 'No results found from any search method');
       return null;
     }
 
@@ -63,7 +63,7 @@ export const findRelevantContent = async (userQuery: string, limit: number) => {
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, limit);
 
-    logger.info(LogCategory.SEARCH, `Found ${finalResults.length} relevant content items`);
+    // logger.info(LogCategory.SEARCH, `Found ${finalResults.length} relevant content items`);
 
     return finalResults.map(item => ({
       content: item.content,
@@ -73,7 +73,7 @@ export const findRelevantContent = async (userQuery: string, limit: number) => {
     }));
     
   } catch (error) {
-    logger.error(LogCategory.SEARCH, 'Error in findRelevantContent:', error);
+    // logger.error(LogCategory.SEARCH, 'Error in findRelevantContent:', error);
     console.error('Error in vector search:', error);
     return null;
   }

@@ -45,7 +45,7 @@ async function crawlDocuments() {
     }
 
     // Show log statistics
-    const logCounts = logger.getLogCounts();
+    // const logCounts = logger.getLogCounts();
     console.log('\n📊 Crawling Statistics:');
     console.log(`  - Total logs: ${logCounts.total}`);
     console.log(`  - Crawl logs: ${logCounts.crawl}`);
@@ -56,7 +56,7 @@ async function crawlDocuments() {
 
   } catch (error) {
     console.error('❌ Document crawling failed:', error);
-    logger.error(LogCategory.CRAWLER, 'Crawling script failed', error);
+    // logger.error(LogCategory.CRAWLER, 'Crawling script failed', error);
     process.exit(1);
   }
 }

@@ -2,7 +2,6 @@
 
 import { config } from 'dotenv';
 import { RAGOrchestratorFactory } from '../lib/RAGOrchestrator';
-import { logger, LogCategory } from '../lib/logging/Logger';
 import { supabaseService } from '../lib/database/SupabaseService';
 
 // Load environment variables
@@ -86,7 +85,6 @@ async function testAdvancedRAGSearch() {
 
   } catch (error) {
     console.error('❌ Test failed:', error);
-    logger.error(LogCategory.TEST, 'Advanced RAG test failed', error);
     process.exit(1);
   }
 }
