@@ -70,7 +70,7 @@ export interface AdvancedSearchResult {
   similarity: number;
   keyword_match_score: number;
   combined_score: number;
-  metadata?: any;
+  metadata?: Record<string, string>;
   chunk_type?: string;
   keywords?: string[];
   is_original_match: boolean;

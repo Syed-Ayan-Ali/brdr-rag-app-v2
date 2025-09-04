@@ -159,7 +159,7 @@ export default function ChatPanel() {
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-slate-700 mb-2">Start a conversation</h3>
-              <p className="text-slate-500">Ask me anything and I'll help you out!</p>
+              <p className="text-slate-500">Ask me anything and I will help you out!</p>
             </div>
           )}
         </div>

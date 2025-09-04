@@ -20,7 +20,6 @@ interface VectorSearchResult {
     pageNumber: number;
     chunkType: string;
     originalContent?: string;
-    [key: string]: any;
   };
 }
 
@@ -28,7 +27,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const [isPDFViewerOpen, setIsPDFViewerOpen] = useState(false);
-  const [pdfDocuments, setPdfDocuments] = useState<any[]>([]);
+  const [pdfDocuments, setPdfDocuments] = useState<{ doc_id: string; pageNumber: number; chunkText: string; url: string }[]>([]);
 
   const handleClarificationClick = (option: string) => {
     if (onClarificationSelect) {
@@ -130,18 +129,9 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                     );
                     
                   case 'input-available':
-                    return (
-                      <div key={index} className="space-y-3">
-                        Retrieving date and time for {String((part.input as { question: string }).question)}...
-                      </div>
-                    );
-
+                    
                   case 'output-available':
-                    return (
-                      <div key={index} className="space-y-3">
-                        Date and time retrieved: {part.output as any}
-                      </div>
-                    );
+                    
                   case 'output-error':
                     return (
                       <div key={index} className="space-y-3">
@@ -160,17 +150,9 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                     );
                   
                   case 'input-available':
-                    return (
-                      <div key={index} className="space-y-3">
-                        Generating answer for {(part.input as any)?.question || 'your query'}...
-                      </div>
-                    );
+                    
                   case 'output-available':
-                    return (
-                      <div key={index} className="space-y-3">
-                        Answer generated: {part.output as any}
-                      </div>
-                    );
+                   
                   
                   case 'output-error':
                     return (
