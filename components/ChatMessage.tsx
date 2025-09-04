@@ -103,7 +103,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
             : 'bg-white border border-slate-200 text-slate-800'
         }`}>
           {message.parts.map((part, index) => {
-            console.log("part is", part, "with index", index)
+            // console.log("part is", part, "with index", index)
             switch (part.type) {
               case 'step-start':
                 return index > 0 ? (
@@ -165,6 +165,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
             
               case 'tool-find_relevant_brdr_document_data': {
                 const callId = part.toolCallId;
+                console.log("Tool called: find_relevant_brdr_document_data with callId", callId)
 
                 switch (part.state) {
                   case 'input-streaming':
