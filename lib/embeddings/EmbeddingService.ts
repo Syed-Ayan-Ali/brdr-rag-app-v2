@@ -1,4 +1,4 @@
-import { pipeline, Pipeline } from '@xenova/transformers';
+import { pipeline, Pipeline, FeatureExtractionPipeline } from '@xenova/transformers';
 
 export interface EmbeddingResult {
   embedding: number[];
@@ -9,7 +9,7 @@ export interface EmbeddingResult {
 
 export class EmbeddingService {
   private static instance: EmbeddingService;
-  private embedder: Pipeline | null = null;
+  private embedder: FeatureExtractionPipeline | null = null;
   private readonly model: string;
   private readonly dimension: number;
   private isInitialized: boolean = false;
