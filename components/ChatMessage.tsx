@@ -1,6 +1,8 @@
 'use client';
 
 import { UIMessage } from 'ai';
+import { useState } from 'react';
+import PDFViewer from './PDFViewer';
 
 interface ChatMessageProps {
   message: UIMessage;
@@ -8,9 +10,25 @@ interface ChatMessageProps {
   onClarificationSelect?: (option: string) => void;
 }
 
+interface VectorSearchResult {
+  id: string;
+  doc_id: string;
+  content: string;
+  similarity: number;
+  metadata: {
+    chunkId: string;
+    pageNumber: number;
+    chunkType: string;
+    originalContent?: string;
+    [key: string]: any;
+  };
+}
+
 export default function ChatMessage({ message,  isLast, onClarificationSelect }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  const [isPDFViewerOpen, setIsPDFViewerOpen] = useState(false);
+  const [pdfDocuments, setPdfDocuments] = useState<any[]>([]);
 
   const handleClarificationClick = (option: string) => {
     if (onClarificationSelect) {
@@ -18,9 +36,43 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
     }
   };
 
+  const handleDocumentClick = (doc_id: string, pageNumber: number, chunkText: string) => {
+    console.log('handleDocumentClick called with:', { doc_id, pageNumber, chunkText: chunkText?.substring(0, 50) });
+    
+    if (!doc_id || doc_id === 'undefined') {
+      console.error('Invalid doc_id:', doc_id);
+      return;
+    }
+    
+    const url = `https://brdr.hkma.gov.hk/eng/doc-ldg/docId/getPdf/${doc_id}/${doc_id}.pdf`;
+    console.log("Generated PDF URL:", url);
+    
+    const newDoc = {
+      doc_id,
+      pageNumber, 
+      chunkText,
+      url
+    };
+    
+    // Add or update document in the list 
+    setPdfDocuments(prev => {
+      const existing = prev.find(doc => doc.doc_id === doc_id);
+      if (existing) {
+        // Update existing document
+        return prev.map(doc => doc.doc_id === doc_id ? newDoc : doc);
+      } else {
+        // Add new document
+        const updated = [...prev, newDoc];
+        return updated;
+      }
+    });
+    
+    setIsPDFViewerOpen(true);
+  };
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${isLast ? 'animate-slide-in-right' : ''}`}>
-      <div className={`max-w-[80%] ${isUser ? 'order-2' : 'order-1'}`}>
+      <div className={`max-w-[80%] lg:max-w-[70%] xl:max-w-[60%] ${isUser ? 'order-2' : 'order-1'}`}>
         {/* Avatar */}
         <div className={`flex items-center mb-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 ${
@@ -68,63 +120,55 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                   </div>
                 );
 
-              // case 'tool-find_relevant_brdr_document_data': {
-               
-              //     switch (part.state) {
-              //       case 'input-streaming':
-              //         return (
-              //           <div key={index} className="space-y-3">
-              //             Retreiving chunks...
-              //           </div>
-              //         );
+              case  'tool-get_date_time_from_query': {
+                switch (part.state) {
+                  case 'input-streaming':
+                    return (
+                      <div key={index} className="space-y-3">
+                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></span> Retrieving date and time...
+                      </div>
+                    );
                     
-              //         case 'input-available':
-              //           return (
-              //             <div key={index} className="space-y-3">
-              //               Retreiving chunks for {part.input.question}...
-              //             </div>
-              //           );
+                  case 'input-available':
+                    return (
+                      <div key={index} className="space-y-3">
+                        Retrieving date and time for {String((part.input as { question: string }).question)}...
+                      </div>
+                    );
 
-              //         case 'output-available':
-              //           return (
-              //             <div key={index} className="space-y-3">
-              //               Chunks retreived: 
-              //               {part.output.map((chunk: any, idx: number) => (
-              //                 <div key={idx}>{chunk}</div>
-              //               ))}
-              //             </div>
-              //           );
-
-              //         case 'output-error':
-              //           return (
-              //             <div key={index} className="space-y-3">
-              //               Error retreiving chunks: {part.errorText}...
-              //             </div>
-              //           );
-
-              //     }
-              //     break;
-              //   }
-              
+                  case 'output-available':
+                    return (
+                      <div key={index} className="space-y-3">
+                        Date and time retrieved: {part.output as any}
+                      </div>
+                    );
+                  case 'output-error':
+                    return (
+                      <div key={index} className="space-y-3">
+                        Error retrieving date and time: {part.errorText}...
+                      </div>
+                    );
+                }
+              }
               case 'tool-tell_the_user_the_answer': {
                 switch (part.state) {
                   case 'input-streaming':
                     return (
                       <div key={index} className="space-y-3">
-                        Generating answer...
+                        <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></span> 
                       </div>
                     );
                   
                   case 'input-available':
                     return (
                       <div key={index} className="space-y-3">
-                        Generating answer for {part.input.question}...
+                        Generating answer for {(part.input as any)?.question || 'your query'}...
                       </div>
                     );
                   case 'output-available':
                     return (
                       <div key={index} className="space-y-3">
-                        Answer generated: {part.output}
+                        Answer generated: {part.output as any}
                       </div>
                     );
                   
@@ -136,137 +180,153 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                     );
                   }
               }
-
-              // case 'tool-weather': {
-              //   const callId = part.toolCallId;
-
-              //   switch (part.state) {
-              //     case 'input-streaming':
-              //       return (
-              //         <div key={callId} className="flex items-center space-x-2">
-              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-              //           <span>Getting weather...</span>
-              //         </div>
-              //       );
-              //     case 'input-available':
-              //       return (
-              //         <div key={callId} className="space-y-3">
-                        
-              //         </div>
-              //       );
-              //     case 'output-available':
-              //       return (
-              //         <div key={callId} className="space-y-3">
-              //            {part.output}
-              //         </div>
-              //       );
-              //     case 'output-error':
-              //       return (
-              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
-              //           ❌ Weather error: {part.errorText}
-              //         </div>
-              //       );
-              //   }
-              //   break;
-              // }
-
-              // case 'tool-cityAttractions': {
-              //   return (
-              //     <div key={index} className="space-y-3">
-              //       {part.output && part.output.location}
-              //     </div>
-              //   );
-              // }
             
-              // case 'tool-searchDocuments': {
-              //   const callId = part.toolCallId;
+              case 'tool-find_relevant_brdr_document_data': {
+                const callId = part.toolCallId;
 
-              //   switch (part.state) {
-              //     case 'input-streaming':
-              //       return (
-              //         <div key={callId} className="flex items-center space-x-2">
-              //           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-              //           <span>Searching documents...</span>
-              //         </div>
-              //       );
-              //     case 'input-available':
-              //       return (
-              //         <div key={callId} className="space-y-3">
-              //           <div className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
-              //             <strong>Search Query:</strong> {(part.input as { query: string }).query}
-              //             {(part.input as any).searchType && (
-              //               <div className="mt-1 text-xs text-blue-600">
-              //                 Strategy: {(part.input as any).searchType}
-              //               </div>
-              //             )}
-              //           </div>
-              //         </div>
-              //       );
-              //     case 'output-available':
-              //       const output = part.output as any;
-              //       return (
-              //         <div key={callId} className="space-y-3">
-              //           <div className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
-              //             <div className="font-semibold text-green-800">Search Results</div>
-              //             <div className="mt-2 space-y-1 text-xs">
-              //               <div>📄 Documents found: {output.documents}</div>
-              //               <div>🔍 Search strategy: {output.searchStrategy}</div>
-              //               <div>📝 Expanded queries: {output.expandedQueries}</div>
-              //               {output.analysis && (
-              //                 <div>🎯 Intent: {output.analysis.intent}</div>
-              //               )}
-              //             </div>
-              //           </div>
+                switch (part.state) {
+                  case 'input-streaming':
+                    return (
+                      <div key={callId} className="flex items-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                        <span>Searching documents...</span>
+                      </div>
+                    );
+                  case 'input-available':
+                    return (
+                      <div key={callId} className="space-y-3">
+                        <div className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
+                          <strong>Search Query:</strong> {(part.input as { question: string }).question}
+                         
+                        </div>
+                      </div>
+                    );
+                  case 'output-available':
+                    const output = part.output as VectorSearchResult[];
+                    return (
+                      <div key={callId} className="space-y-3">
+                        {/* the case of null return value*/}
+                        <div>
+                          {output === null && (
+                            <div className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+                              ❌ Search error: Sorry, I encountered an internal function error while retrieving data from the knowledge base. This could be due to timeout, connectivity issues, or database problems. Please try again in a moment.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* the case of output is not null*/}
                         
-              //           {/* Metrics Display */}
-              //           {output.metricsText && (
-              //             <div className="text-xs bg-blue-50 p-3 rounded-lg border border-blue-200">
-              //               <div className="font-semibold text-blue-800 mb-2">Query Performance</div>
-              //               <div className="space-y-1 text-blue-700 whitespace-pre-line">
-              //                 {output.metricsText}
-              //               </div>
-              //             </div>
-              //           )}
+                        {output && output.length > 0 && (
+                          <div className="text-sm bg-green-50 p-3 rounded-lg border border-green-200">
+                              <div className="font-semibold text-green-800">Vector Search Results</div>
+                              <div className="mt-2 space-y-1 text-xs">
+                                <div>📄 Chunks found: {output ? output.length : 0}</div>
+                                <div>🎯 Similarity threshold: Applied</div>
+                                <div>🔍 Search type: Vector semantic search</div>
+                              </div>
+                            </div>
+                        )}
+                      
+                        {/* Document Chunks Display */}
+                        {output && output.length > 0 && (
+                          <div className="text-xs bg-purple-50 p-3 rounded-lg border border-purple-200">
+                            <div className="font-semibold text-purple-800 mb-2">Source Document Chunks</div>
+                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                              {output.map((chunk: VectorSearchResult, idx: number) => (
+                                <div key={chunk.id} className="bg-white p-3 rounded border border-purple-200">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <button
+                                      onClick={() => {
+                                        console.log('Clicking document:', chunk.doc_id, chunk.metadata.pageNumber, chunk.content.substring(0, 50));
+                                        handleDocumentClick(
+                                          chunk.doc_id, 
+                                          chunk.metadata.pageNumber || 1, 
+                                          chunk.content
+                                        );
+                                      }}
+                                      className="text-purple-600 hover:text-purple-800 hover:underline transition-colors font-medium text-sm flex items-center space-x-1"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      <span>📄 {chunk.doc_id}</span>
+                                    </button>
+                                    <div className="text-xs text-gray-500">
+                                      Similarity: {(chunk.similarity * 100).toFixed(1)}%
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="text-xs text-gray-600 mb-2">
+                                    <span className="font-medium">Chunk ID:</span> {chunk.metadata.chunkId} | 
+                                    <span className="font-medium"> Page:</span> {chunk.metadata.pageNumber} | 
+                                    <span className="font-medium"> Type:</span> {chunk.metadata.chunkType}
+                                  </div>
+                                  
+                                  <div className="text-xs bg-gray-50 p-2 rounded border">
+                                    <div className="font-semibold mb-1 text-gray-700">Chunk Content:</div>
+                                    <div className="text-gray-600 max-h-20 overflow-y-auto">
+                                      {chunk.content.substring(0, 300)}{chunk.content.length > 300 ? '...' : ''}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         
-              //           {/* Document Links */}
-              //           {output.documentLinks && output.documentLinks.length > 0 && (
-              //             <div className="text-xs bg-purple-50 p-3 rounded-lg border border-purple-200">
-              //               <div className="font-semibold text-purple-800 mb-2">Source Documents</div>
-              //               <div className="space-y-1">
-              //                 {output.documentLinks.map((link: any, idx: number) => (
-              //                   <a
-              //                     key={idx}
-              //                     href={link.url}
-              //                     target="_blank"
-              //                     rel="noopener noreferrer"
-              //                     className="block text-purple-600 hover:text-purple-800 hover:underline transition-colors"
-              //                   >
-              //                     📄 {link.docId}
-              //                   </a>
-              //                 ))}
-              //               </div>
-              //             </div>
-              //           )}
-                        
-              //           {output.context && (
-              //             <div className="text-xs bg-gray-50 p-2 rounded border">
-              //               <div className="font-semibold mb-1">Retrieved Context:</div>
-              //               <div className="text-gray-600 max-h-32 overflow-y-auto">
-              //                 {output.context.substring(0, 300)}...
-              //               </div>
-              //             </div>
-              //           )}
-              //         </div>
-              //       );
-              //     case 'output-error':
-              //       return (
-              //         <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
-              //           ❌ Search error: {part.errorText}
-              //         </div>
-              //       );
-              //   }
-              //   break;
-              // }
+                        {/* Quick PDF Access */}
+                        {output && output.length > 0 && (
+                          <div className="text-xs bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                            <div className="font-semibold text-indigo-800 mb-2">📖 Quick PDF Access</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {(() => {
+                                // Create a map to store unique documents with their first occurrence and chunk count
+                                const uniqueDocuments = new Map();
+                                output.forEach(chunk => {
+                                  if (!uniqueDocuments.has(chunk.doc_id)) {
+                                    uniqueDocuments.set(chunk.doc_id, {
+                                      chunk: chunk,
+                                      count: output.filter(c => c.doc_id === chunk.doc_id).length
+                                    });
+                                  }
+                                });
+                                
+                                // Convert to array and take first 4
+                                return Array.from(uniqueDocuments.entries()).slice(0, 4).map(([doc_id, data]) => (
+                                  <button
+                                    key={doc_id}
+                                    onClick={() => {
+                                      console.log('Quick access clicking document:', doc_id, data.chunk.metadata.pageNumber, data.chunk.content.substring(0, 50));
+                                      handleDocumentClick(
+                                        doc_id, 
+                                        data.chunk.metadata.pageNumber || 1, 
+                                        data.chunk.content || ''
+                                      );
+                                    }}
+                                    className="text-left p-2 bg-white rounded border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                                  >
+                                    <div className="font-medium text-indigo-700 text-xs">📄 {doc_id}</div>
+                                    <div className="text-xs text-gray-500">Page {data.chunk.metadata.pageNumber || 1}</div>
+                                    <div className="text-xs text-gray-400 mt-1">
+                                      {data.count} chunk{data.count > 1 ? 's' : ''}
+                                    </div>
+                                  </button>
+                                ));
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  case 'output-error':
+                    return (
+                      <div key={callId} className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+                        ❌ Search error: {part.errorText}
+                      </div>
+                    );
+                }
+                break;
+              }
 
               // case 'tool-clarifyQuery': {
               //   const callId = part.toolCallId;
@@ -452,6 +512,13 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
           )}
         </div>
       </div>
+      
+      {/* PDF Viewer Sidebar */}
+      <PDFViewer
+        documents={pdfDocuments}
+        isOpen={isPDFViewerOpen}
+        onClose={() => setIsPDFViewerOpen(false)}
+      />
     </div>
   );
 } 

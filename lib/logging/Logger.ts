@@ -1,4 +1,5 @@
 export enum LogCategory {
+  SEARCH = 'SEARCH',
   CRAWLER = 'CRAWLER',
   ETL = 'ETL',
   EMBEDDING = 'EMBEDDING',

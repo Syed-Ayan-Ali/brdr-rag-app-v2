@@ -1,10 +1,11 @@
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
-import { convertToModelMessages, streamText, generateText, UIMessage, stepCountIs, InvalidToolInputError, NoSuchToolError, tool } from 'ai';
+import { convertToModelMessages, streamText, generateText, UIMessage, stepCountIs, InvalidToolInputError, NoSuchToolError, tool, ToolSet, InferUITools, UIDataTypes } from 'ai';
 import { z } from 'zod';
 // import { RAGOrchestratorFactory } from '@/lib/RAGOrchestrator';
 import { logger, LogCategory } from '../../../lib/logging/Logger';
-import { findRelevantContent } from '@/lib/embeddings/simpleVectorSearch';
+import { findRelevantContent } from '@/lib/actions/findRelevantContent';
+import { getDateAndTimeFromQuery } from '@/lib/actions/getDateAndTimeFromQuery';
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
@@ -22,13 +23,61 @@ const model = 'gemini-2.0-flash';
 //   return ragOrchestrator;
 // }
 
+
+export type ChatTools = InferUITools<typeof tools>;
+
+export type ChatMessage = UIMessage<never, UIDataTypes, ChatTools>;
+
+
+const tools = {
+  // get_date_time_from_query: tool({
+  //   description: "get the date and time from the users question",
+  //   inputSchema: z.object({
+  //     question: z.string().describe('the users question'),
+  //     limit: z.number().optional().default(1).describe('the number of chunks to return'),
+  //   }),
+  //   execute: async ({ question, limit }) => {
+  //     const result = await getDateAndTimeFromQuery(question, limit);
+  //     console.log("result from get_date_time_from_query is", result);
+  //     return `The date and time from the users question is ${result}`;
+  //   },
+  // }),
+
+  find_relevant_brdr_document_data: tool({
+    description: "Get the chunks relevant to the users question",
+    inputSchema: z.object({
+      question: z.string().describe('the users query to find the relevant chunks'),
+      limit: z.number().optional().default(1).describe('the number of chunks to return'),
+    }),
+    execute: async ({ question, limit }) => {
+      const result = await findRelevantContent(question, limit);
+      console.log("result from find_relevant_brdr_document_data is", result);
+      // Check if the result is an error object
+      return result;
+    },
+  }),
+
+  // tell_the_user_the_answer: tool({
+  //   description: `
+  //   If the result is null, then say nothing. End the conversation.
+  //   Pass the chunks to the llm alongside the user question to generate a comprehensive answer in natural language and using the markdown format. If you receive an error from find_relevant_brdr_document_data, inform the user about the error and ask them to try again.
+  //   `
+  //   ,
+  //   inputSchema: z.object({
+  //     answer: z.string().describe('the answer to the users question'),
+  //   }),
+  //   execute: async ({ answer }) => answer,
+  // }),
+} satisfies ToolSet;
 export async function POST(req: Request) {
+  // const { messages }: { messages: ChatMessage[] } = await req.json();
+  
   const { messages }: { messages: UIMessage[] } = await req.json();
   // const messages = await req.json();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const startTime = Date.now();
 
-  console.log("message is", messages[messages.length - 1].parts[0].text);
+  // console.log("message is", messages[messages.length - 1].parts[0].text);
   // const result =  streamText({
   //   model: google(model),
   //   maxOutputTokens: 512,
@@ -55,28 +104,40 @@ export async function POST(req: Request) {
 
   // console.log(JSON.stringify(result, null, 2));
 
-
-  const tools = {
-    find_relevant_brdr_document_data: tool({
-      description: "Get the chunks relevant to the users question",
-      inputSchema: z.object({
-        question: z.string().describe('the users query to find the relevant chunks'),
-        limit: z.number().optional().default(5).describe('the number of chunks to return'),
-      }),
-      execute: async ({ question, limit }) => findRelevantContent(question, limit),
-    }),
-    tell_the_user_the_answer: tool({
-      description: "Pass the chunks to the llm alongside the user question to generate a comprehensive answer in natural language and using the markdown format.",
-      inputSchema: z.object({
-        answer: z.string().describe('the answer to the users question'),
-      }),
-      execute: async ({ answer }) => answer,
-    }),
-  }
   const result = streamText({
     model: google(model),
+    providerOptions: {
+      google: {
+        safetySettings: [
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH',
+            threshold: 'BLOCK_LOW_AND_ABOVE',
+          },
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+            threshold: 'BLOCK_LOW_AND_ABOVE',
+          },
+          {
+            category: 'HARM_CATEGORY_HARASSMENT',
+            threshold: 'BLOCK_LOW_AND_ABOVE',
+          },
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            threshold: 'BLOCK_LOW_AND_ABOVE',
+          },
+        ],
+        // thinkingConfig: {
+        //   thinkingBudget: 8192,
+        //   includeThoughts: true,
+        // },
+      },
+    },
     messages: convertToModelMessages(messages),
-    // prompt: `Answer the user quesion: ${messages[messages.length - 1].parts[0].text} using the returned chunks`,
+    // system: `
+    // You are an expert AI assistant and you help user answer queries by running the tools provided to you.
+    //         The tools available to you are **get_date_time_from_query** to get the date and time from the users question. 
+    //         and the tool **find_relevant_brdr_document_data** to find the relevant chunks from the brdr_documents_data using semantic similarity. 
+    //         `,
     tools,
     stopWhen: stepCountIs(2),
     toolChoice: 'required',

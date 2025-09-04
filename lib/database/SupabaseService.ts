@@ -249,7 +249,7 @@ export class SupabaseService {
   async vectorSearch(
     queryEmbedding: number[],
     options: SearchOptions = {}
-  ): Promise<SearchResult[]> {
+  ): Promise<SearchResult[] | null | undefined> {
     const {
       similarity_threshold = 0.3,
       match_count = 10,
@@ -266,25 +266,62 @@ export class SupabaseService {
           match_count
         });
 
+        // const data = null;
+        // const error = "error";
+
         console.log("vector search data is", data);
 
-        if (error) {
-          console.error('Vector search RPC error:', error);
-          return [];
+        if (data === null) {
+            return null;
+        } else{
+                // Map the results to match the expected SearchResult format
+                return data.map((item: any) => ({
+                        id: item.id,
+                        doc_id: item.doc_id,
+                        content: item.content,
+                        similarity: item.similarity,
+                        metadata: item.metadata
+                }));
         }
+        
+    } catch (rpcError) {
+        console.log('Simple vector search RPC function not available.');
+        
+    }
+  }
 
-        // Map the results to match the expected SearchResult format
-        return (data || []).map((item: any) => ({
+  async keyWordSearch(
+    queryText: string,
+    options: SearchOptions = {}
+  ): Promise<SearchResult[] | null | undefined> {
+    const { match_count = 10 } = options;
+
+    try {
+      const { data, error } = await this.supabase.rpc('text_search', {
+        query_text: queryText,
+        match_count
+      });
+
+      console.log("keyword search data is", data);
+
+      if (data === null) {
+        return null;
+        
+      } else {
+        return data.map((item: any) => ({
           id: item.id,
           doc_id: item.doc_id,
           content: item.content,
           similarity: item.similarity,
           metadata: item.metadata
         }));
-    } catch (rpcError) {
-        console.log('Simple vector search RPC function not available, using fallback');
-        return [];
-    }
+      }
+
+
+     }
+     catch (rpcError) {
+        console.log('Keyword search RPC function not available.');
+     }
   }
 
   async hybridSearch(
@@ -301,10 +338,18 @@ export class SupabaseService {
       // For simplicity, we'll just use the vector search
       // This is a bare-bones approach that only uses embeddings
       console.log('Using simple vector search instead of hybrid search');
-      return await this.vectorSearch(queryEmbedding, {
+      const result = await this.vectorSearch(queryEmbedding, {
         similarity_threshold,
         match_count
       });
+      
+      // Check if the result is an error object
+      if (result && typeof result === 'object' && 'error' in result && 'type' in result) {
+        console.error('Hybrid search vector search error:', result.error);
+        return [];
+      }
+      
+      return result as SearchResult[];
     } catch (error) {
       console.error('Hybrid search exception:', error);
       return [];
@@ -512,6 +557,138 @@ export class SupabaseService {
   isHealthy(): boolean {
     return this.isConnected;
   }
+
+  /**
+   * Search documents by document ID pattern with optional vector similarity
+   * Supports date-based filtering using patterns like "202508**" or "20250815*"
+   */
+  // async searchByDocIdPattern(
+  //   docIdPattern: string,
+  //   options: {
+  //     limit?: number;
+  //   } = {}
+  // ): Promise<SearchResult[]> {
+  //   const {
+  //     limit = 10,
+  //   } = options;
+
+  //   try {
+  //     let query = this.supabase
+  //       .from('brdr_documents_data')
+  //       .select(`
+  //         id,
+  //         doc_id,
+  //         content,
+  //         metadata,
+  //         embedding,
+  //         brdr_documents!inner(
+  //           doc_long_title,
+  //           doc_type_desc,
+  //           issue_date,
+  //           doc_desc
+  //         )
+  //       `);
+
+  //     // Convert wildcard pattern to PostgreSQL LIKE pattern
+  //     const likePattern = docIdPattern.replace(/\*/g, '%');
+  //     query = query.like('doc_id', likePattern);
+
+      
+  //       // Simple pattern-based search without vector similarity
+  //       const { data, error } = await query.limit(limit);
+
+  //       console.log("doc id pattern search data is", data);
+        
+  //       if (error) {
+  //         console.error('Error in date-filtered search:', error);
+  //         return [];
+  //       }
+
+  //       return (data || []).map(item => ({
+  //         id: item.id,
+  //         doc_id: item.doc_id,
+  //         content: item.content,
+  //         similarity: 0, // No similarity score for pattern-only search
+  //         metadata: {
+  //           ...item.metadata,
+  //           // document_title: item.brdr_documents?.doc_long_title,
+  //           // document_type: item.brdr_documents?.doc_type_desc,
+  //           // issue_date: item.brdr_documents?.issue_date,
+  //           // doc_desc: item.brdr_documents?.doc_desc
+  //         }
+  //       }));
+  //     }
+  //     catch (error) {
+  //     console.error('Error in searchByDocIdPattern:', error);
+  //     return [];
+  //   }
+  // }
+
+  /**
+   * Get documents within a date range using issue_date
+   */
+  // async searchByDateRange(
+  //   startDate: Date,
+  //   endDate: Date,
+  //   options: {
+  //     limit?: number;
+  //   } = {}
+  // ): Promise<SearchResult[]> {
+  //   const {
+  //     limit = 10,
+  //   } = options;
+
+  //   try {
+  //     let query = this.supabase
+  //       .from('brdr_documents_data')
+  //       .select(`
+  //         id,
+  //         doc_id,
+  //         content,
+  //         metadata,
+  //         embedding,
+  //         brdr_documents!inner(
+  //           doc_long_title,
+  //           doc_type_desc,
+  //           issue_date,
+  //           doc_desc
+  //         )
+  //       `);
+
+  //     // Filter by date range
+  //     query = query
+  //       .gte('brdr_documents.issue_date', startDate.toISOString())
+  //       .lte('brdr_documents.issue_date', endDate.toISOString());
+
+  //       // Simple date range search without vector similarity
+  //       const { data, error } = await query.limit(limit);
+
+  //       console.log("date range search data is", data);
+        
+  //       if (error) {
+  //         console.error('Error in date range search:', error);
+  //         return [];
+  //       }
+
+  //       return (data || []).map(item => ({
+  //         id: item.id,
+  //         doc_id: item.doc_id,
+  //         content: item.content,
+  //         similarity: 0,
+  //         metadata: {
+  //           ...item.metadata,
+  //           document_title: item.brdr_documents?.doc_long_title,
+  //           document_type: item.brdr_documents?.doc_type_desc,
+  //           issue_date: item.brdr_documents?.issue_date,
+  //           doc_desc: item.brdr_documents?.doc_desc
+  //         }
+  //       }));
+  //     }
+  //    catch (error) {
+  //     console.error('Error in searchByDateRange:', error);
+  //     return [];
+  //   }
+  // }
 }
 
 // Export singleton instance

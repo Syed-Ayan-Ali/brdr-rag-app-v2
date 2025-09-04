@@ -25,8 +25,7 @@ export default function ChatPanel() {
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
-
-    // sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
 
   // const { messages, sendMessage, status } = useChat();

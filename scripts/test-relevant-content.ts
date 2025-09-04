@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-import { findRelevantContent } from '../lib/embeddings/findRelevantContent';
+import { findRelevantContent } from '../lib/actions/findRelevantContent';
 
 async function testFindRelevantContent() {
   try {
