@@ -132,14 +132,12 @@ export async function POST(req: Request) {
       },
     },
     messages: convertToModelMessages(messages),
-    // system: `
-    // You are an expert AI assistant and you help user answer queries by running the tools provided to you.
-    //         The tools available to you are **get_date_time_from_query** to get the date and time from the users question. 
-    //         and the tool **find_relevant_brdr_document_data** to find the relevant chunks from the brdr_documents_data using semantic similarity. 
-    //         `,
+    system: `
+    You are an expert AI assistant and you help user answer queries by running the tools provided to you.
+            The tools available to you is **find_relevant_brdr_document_data** to find the relevant chunks from the brdr_documents_data using semantic similarity. 
+            Use the chunks from the tool to answer the users question.
+            `,
     tools,
-    stopWhen: stepCountIs(2),
-    toolChoice: 'required',
   });
 
   // for (const toolResult of await result.toolResults) {

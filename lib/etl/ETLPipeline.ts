@@ -368,14 +368,14 @@ export class ETLPipeline {
       concepts: apiDocument.concepts || [],
       document_type: apiDocument.document_type,
       language: apiDocument.language || 'en',
-      doc_topic_subtopic_list: apiDocument.doc_topic_subtopic_list,
-      doc_keyword_list: apiDocument.doc_keyword_list,
-      doc_ai_type_list: apiDocument.doc_ai_type_list,
-      doc_view_list: apiDocument.doc_view_list,
-      directly_related_doc_list: apiDocument.directly_related_doc_list,
-      version_history_doc_list: apiDocument.version_history_doc_list,
-      reference_doc_list: apiDocument.reference_doc_list,
-      superseded_doc_list: apiDocument.superseded_doc_list
+      doc_topic_subtopic_list: apiDocument.doc_topic_subtopic_list ? JSON.stringify(apiDocument.doc_topic_subtopic_list).split(',') : [],
+      doc_keyword_list: apiDocument.doc_keyword_list ? JSON.stringify(apiDocument.doc_keyword_list).split(',') : [],
+      doc_ai_type_list: apiDocument.doc_ai_type_list ? JSON.stringify(apiDocument.doc_ai_type_list).split(',') : [],
+      doc_view_list: apiDocument.doc_view_list ? JSON.stringify(apiDocument.doc_view_list).split(',') : [],
+      directly_related_doc_list: apiDocument.directly_related_doc_list ? JSON.stringify(apiDocument.directly_related_doc_list).split(',') : [],
+      version_history_doc_list: apiDocument.version_history_doc_list ? JSON.stringify(apiDocument.version_history_doc_list).split(',') : [],
+      reference_doc_list: apiDocument.reference_doc_list ? JSON.stringify(apiDocument.reference_doc_list).split(',') : [],
+      superseded_doc_list: apiDocument.superseded_doc_list ? JSON.stringify(apiDocument.superseded_doc_list).split(',') : []
     };
 
     // Store main document
@@ -441,14 +441,14 @@ export class ETLPipeline {
       concepts: apiDocument.concepts || [],
       document_type: apiDocument.document_type,
       language: apiDocument.language || 'en',
-      doc_topic_subtopic_list: apiDocument.doc_topic_subtopic_list,
-      doc_keyword_list: apiDocument.doc_keyword_list,
-      doc_ai_type_list: apiDocument.doc_ai_type_list,
-      doc_view_list: apiDocument.doc_view_list,
-      directly_related_doc_list: apiDocument.directly_related_doc_list,
-      version_history_doc_list: apiDocument.version_history_doc_list,
-      reference_doc_list: apiDocument.reference_doc_list,
-      superseded_doc_list: apiDocument.superseded_doc_list
+      doc_topic_subtopic_list: apiDocument.doc_topic_subtopic_list ? JSON.stringify(apiDocument.doc_topic_subtopic_list).split(',') : [],
+      doc_keyword_list: apiDocument.doc_keyword_list ? JSON.stringify(apiDocument.doc_keyword_list).split(',') : [],
+      doc_ai_type_list: apiDocument.doc_ai_type_list ? JSON.stringify(apiDocument.doc_ai_type_list).split(',') : [],
+      doc_view_list: apiDocument.doc_view_list ? JSON.stringify(apiDocument.doc_view_list).split(',') : [],
+      directly_related_doc_list: apiDocument.directly_related_doc_list ? JSON.stringify(apiDocument.directly_related_doc_list).split(',') : [],
+      version_history_doc_list: apiDocument.version_history_doc_list ? JSON.stringify(apiDocument.version_history_doc_list).split(',') : [],
+      reference_doc_list: apiDocument.reference_doc_list ? JSON.stringify(apiDocument.reference_doc_list).split(',') : [],
+      superseded_doc_list: apiDocument.superseded_doc_list ? JSON.stringify(apiDocument.superseded_doc_list).split(',') : []
     };
 
     // Store main document only

@@ -1,5 +1,4 @@
 import { markdownPageChunker, ProcessedDocument } from '../lib/chunking/MarkdownPageChunker';
-import { logger, LogCategory } from '../lib/logging/Logger';
 
 export interface MarkdownCrawledDocument {
   doc_id: string;

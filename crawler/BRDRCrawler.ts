@@ -6,6 +6,46 @@ const API_URL = "https://brdr.hkma.gov.hk/restapi/doc-search";
 const PDF_URL_TEMPLATE = "https://brdr.hkma.gov.hk/eng/doc-ldg/docId/getPdf/{doc_id}/{doc_id}.pdf";
 const PAGE_SIZE = 20;
 
+export interface KeywordItem {
+  keywordCode?: string;
+  keywordDesc?: string;
+  keywordDspSeq?: number;
+}
+
+export interface AiTypeItem {
+  aiTypeCode?: string;
+  aiTypeDesc?: string;
+  aiTypeDspSeq?: number;
+}
+
+export interface ViewItem {
+  viewCode?: string;
+  viewDesc?: string;
+  viewDspSeq?: number;
+}
+
+export interface RelatedDocItem {
+  docId?: string;
+  docLongTitle?: string;
+  docTypeDesc?: string;
+  issueDate?: string;
+  guidelineNo?: string;
+  supersessionDate?: string;
+  isDocNotExists?: boolean;
+  docNotExistsMsg?: string;
+}
+
+export interface DocLangMapItem {
+  langCode?: string;
+  docId?: string;
+}
+
+export interface GroupRelationshipItem {
+  groupId?: string;
+  groupDesc?: string;
+  groupDspSeq?: number;
+}
+
 export interface BRDRDocument {
   // Core document fields
   docId: string;
@@ -34,28 +74,28 @@ export interface BRDRDocument {
   }>;
   
   // Lists and arrays
-  docKeywordList?: any[];
-  docDisplayKeywordList?: any[];
-  docAiTypeList?: any[];
-  docUserSelectedKeyowrdList?: any[];
-  docUserInputtedKeywordList?: any[];
-  docViewList?: any[];
-  directlyRelatedDocList?: any[];
-  versionHistoryDocList?: any[];
-  referenceDocList?: any[];
-  supersededDocList?: any[];
+  docKeywordList?: KeywordItem[];
+  docDisplayKeywordList?: KeywordItem[];
+  docAiTypeList?: AiTypeItem[];
+  docUserSelectedKeyowrdList?: KeywordItem[];
+  docUserInputtedKeywordList?: KeywordItem[];
+  docViewList?: ViewItem[];
+  directlyRelatedDocList?: RelatedDocItem[];
+  versionHistoryDocList?: RelatedDocItem[];
+  referenceDocList?: RelatedDocItem[];
+  supersededDocList?: RelatedDocItem[];
   
   // Additional metadata
   spmCode?: string;
   consultStsCode?: string;
   consultOpenDate?: string;
   consultClsDate?: string;
-  docLangMapDto?: any;
-  searchWordSet?: any;
-  interestedInDocList?: any;
-  crossRelpItemDto?: any;
-  versionHistRelpItemDto?: any;
-  supsdRelpItemDto?: any;
+  docLangMapDto?: DocLangMapItem;
+  searchWordSet?: string[];
+  interestedInDocList?: RelatedDocItem[];
+  crossRelpItemDto?: Record<string, RelatedDocItem[]>;
+  versionHistRelpItemDto?: Record<string, RelatedDocItem[]>;
+  supsdRelpItemDto?: Record<string, RelatedDocItem[]>;
   showInterestedDoc?: boolean;
   isShowDocEngVersion?: boolean;
   isShowDocChiVersion?: boolean;
@@ -63,12 +103,12 @@ export interface BRDRDocument {
   chiDocId?: string;
   isDocNotExists?: boolean;
   docNotExistsMsg?: string;
-  groupRelationshipDtoList?: any[];
+  groupRelationshipDtoList?: GroupRelationshipItem[];
   docSubtypeCode?: string;
   isOnlyAvailableLangCode?: boolean;
   isSPM?: boolean;
   
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface CrawledDocument {
@@ -96,14 +136,25 @@ export interface CrawledDocument {
   supersession_date?: string;
   
   // BRDR-specific arrays
-  doc_topic_subtopic_list?: any;
-  doc_keyword_list?: any;
-  doc_ai_type_list?: any;
-  doc_view_list?: any;
-  directly_related_doc_list?: any;
-  version_history_doc_list?: any;
-  reference_doc_list?: any;
-  superseded_doc_list?: any;
+  doc_topic_subtopic_list?: Array<{
+    codeType?: string;
+    topicCode?: string;
+    subtopicCode?: string;
+    topicSubtopicCode?: string;
+    topicSubtopicDesc?: string;
+    topicDesc: string;
+    subtopicDesc: string;
+    topicDspSeq?: number;
+    subtopicDspSeq?: number;
+    topicSubtopicSame?: boolean;
+  }> | null;
+  doc_keyword_list?: KeywordItem[] | null;
+  doc_ai_type_list?: AiTypeItem[] | null;
+  doc_view_list?: ViewItem[] | null;
+  directly_related_doc_list?: RelatedDocItem[] | null;
+  version_history_doc_list?: RelatedDocItem[] | null;
+  reference_doc_list?: RelatedDocItem[] | null;
+  superseded_doc_list?: RelatedDocItem[] | null;
   
   // Enhanced fields
   topics?: string[];
@@ -317,7 +368,7 @@ export class BRDRCrawler {
           // Log crawl result
           // logger.logCrawl({
           //   timestamp: new Date().toISOString(),
-          //   level: 'AUDIT' as any,
+          //   level: 'AUDIT',
           //   category: LogCategory.CRAWLER,
           //   message: `Crawled document: ${doc.docId}`,
           //   docId: doc.docId,
