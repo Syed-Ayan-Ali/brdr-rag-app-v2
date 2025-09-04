@@ -55,10 +55,10 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
     
     // Add or update document in the list 
     setPdfDocuments(prev => {
-      const existing = prev.find(doc => doc.doc_id === doc_id);
+      const existing = prev.find(doc => doc.doc_id === doc_id && doc.pageNumber === pageNumber);
       if (existing) {
-        // Update existing document
-        return prev.map(doc => doc.doc_id === doc_id ? newDoc : doc);
+        // Update existing document with same doc_id and page number
+        return prev.map(doc => (doc.doc_id === doc_id && doc.pageNumber === pageNumber) ? newDoc : doc);
       } else {
         // Add new document
         const updated = [...prev, newDoc];
@@ -220,9 +220,10 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                                     <button
                                       onClick={() => {
                                         console.log('Clicking document:', chunk.doc_id, chunk.content.substring(0, 50));
+                                        console.log('Metadata when clicking:', chunk.metadata);
                                         handleDocumentClick(
                                           chunk.doc_id, 
-                                          1, 
+                                          chunk.metadata?.pageNumber || 1, 
                                           chunk.content
                                         );
                                       }}
@@ -239,9 +240,17 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                                   </div>
                                   
                                   <div className="text-xs text-gray-600 mb-2">
-                                    {/* <span className="font-medium">Chunk ID:</span> {chunk.metadata.chunkId} | 
-                                    <span className="font-medium"> Page:</span> {chunk.metadata.pageNumber} | 
-                                    <span className="font-medium"> Type:</span> {chunk.metadata.chunkType} */}
+                                    {chunk.metadata ? (
+                                      <>
+                                        <span className="font-medium">Chunk ID:</span> {chunk.metadata.chunkId} | 
+                                        <span className="font-medium"> Page:</span> {chunk.metadata.pageNumber} | 
+                                        <span className="font-medium"> Type:</span> {chunk.metadata.chunkType}
+                                      </>
+                                    ) : (
+                                      <span className="font-medium text-red-500">No metadata available</span>
+                                    )}
+                                    {/* Debug metadata */}
+                                    {(() => { console.log('Chunk metadata:', chunk.metadata); return null; })()}
                                   </div>
                                   
                                   <div className="text-xs bg-gray-50 p-2 rounded border">
@@ -257,7 +266,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                         )}
                         
                         {/* Quick PDF Access */}
-                        {/* {output && output.length > 0 && (
+                        {output && output.length > 0 && (
                           <div className="text-xs bg-indigo-50 p-3 rounded-lg border border-indigo-200">
                             <div className="font-semibold text-indigo-800 mb-2">📖 Quick PDF Access</div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -273,22 +282,23 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                                   }
                                 });
                                 
-                                // Convert to array and take first 4
-                                return Array.from(uniqueDocuments.entries()).slice(0, 4).map(([doc_id, data]) => (
+                                // Convert to array and show all unique documents
+                                return Array.from(uniqueDocuments.entries()).map(([doc_id, data]) => (
                                   <button
                                     key={doc_id}
                                     onClick={() => {
-                                      console.log('Quick access clicking document:', doc_id, data.chunk.metadata.pageNumber, data.chunk.content.substring(0, 50));
+                                      console.log('Quick access clicking document:', doc_id, data.chunk.metadata?.pageNumber, data.chunk.content.substring(0, 50));
+                                      console.log('Quick access metadata:', data.chunk.metadata);
                                       handleDocumentClick(
                                         doc_id, 
-                                        data.chunk.metadata.pageNumber || 1, 
+                                        data.chunk.metadata?.pageNumber || 1, 
                                         data.chunk.content || ''
                                       );
                                     }}
                                     className="text-left p-2 bg-white rounded border border-indigo-200 hover:bg-indigo-50 transition-colors"
                                   >
                                     <div className="font-medium text-indigo-700 text-xs">📄 {doc_id}</div>
-                                    <div className="text-xs text-gray-500">Page {data.chunk.metadata.pageNumber || 1}</div>
+                                    <div className="text-xs text-gray-500">Page {data.chunk.metadata?.pageNumber || 1}</div>
                                     <div className="text-xs text-gray-400 mt-1">
                                       {data.count} chunk{data.count > 1 ? 's' : ''}
                                     </div>
@@ -297,7 +307,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                               })()}
                             </div>
                           </div>
-                        )} */}
+                        )}
                       </div>
                     );
                   case 'output-error':

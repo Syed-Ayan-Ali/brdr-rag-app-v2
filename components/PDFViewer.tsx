@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface PDFDocument {
   doc_id: string;
@@ -17,6 +17,7 @@ interface PDFViewerProps {
 
 export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps) {
   const [activeTab, setActiveTab] = useState(0);
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
 
   // Reset active tab when documents change
   useEffect(() => {
@@ -25,15 +26,34 @@ export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps
     }
   }, [documents]);
 
+  // Scroll to active tab when it changes
+  useEffect(() => {
+    if (tabsContainerRef.current && documents.length > 0) {
+      const tabElements = tabsContainerRef.current.querySelectorAll('button');
+      if (tabElements[activeTab]) {
+        tabElements[activeTab].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [activeTab, documents.length]);
+
   if (!isOpen || documents.length === 0) {
     return null;
   }
+
+  // Filter out duplicate PDFs (same doc_id)
+  const uniqueDocuments = documents.reduce((acc: PDFDocument[], current) => {
+    const isDuplicate = acc.find(doc => doc.doc_id === current.doc_id);
+    if (!isDuplicate) {
+      acc.push(current);
+    }
+    return acc;
+  }, []);
 
   return (
     <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-white shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-        <h3 className="text-lg font-semibold text-gray-800">PDF Viewer</h3>
+        <h3 className="text-lg font-semibold text-gray-800">PDF Viewer <span className="text-sm font-normal text-gray-500">({uniqueDocuments.length} document{uniqueDocuments.length !== 1 ? 's' : ''})</span></h3>
         <button
           onClick={onClose}
           className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
@@ -44,11 +64,15 @@ export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps
         </button>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex overflow-x-auto border-b border-gray-200 bg-white">
-        {documents.slice(0, 5).map((doc, index) => (
+      {/* Tab Navigation with Scrollbar */}
+      <div 
+        ref={tabsContainerRef}
+        className="flex overflow-x-auto border-b border-gray-200 bg-white scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100"
+        style={{ scrollbarWidth: 'thin' }}
+      >
+        {uniqueDocuments.map((doc, index) => (
           <button
-            key={doc.doc_id}
+            key={`${doc.doc_id}-${index}`}
             onClick={() => setActiveTab(index)}
             className={`flex-shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === index
@@ -69,9 +93,9 @@ export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps
 
       {/* PDF Content */}
       <div className="flex-1 flex flex-col">
-        {documents.slice(0, 5).map((doc, index) => (
+        {uniqueDocuments.map((doc, index) => (
           <div
-            key={doc.doc_id}
+            key={`${doc.doc_id}-content-${index}`}
             className={`flex-1 ${activeTab === index ? 'block' : 'hidden'}`}
           >
             {/* Document Info */}

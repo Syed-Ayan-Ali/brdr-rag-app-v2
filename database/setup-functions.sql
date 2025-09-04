@@ -45,7 +45,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function for vector similarity search
 CREATE OR REPLACE FUNCTION vector_search(
-    query_embedding VECTOR(384),
+    query_embedding VECTOR(1536),
     similarity_threshold FLOAT DEFAULT 0.3,
     match_count INT DEFAULT 10,
     search_table TEXT DEFAULT 'brdr_documents_data'
@@ -88,64 +88,235 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function for hybrid search (vector + text)
+-- Function for keyword search in the keywords array column
+CREATE OR REPLACE FUNCTION keyword_search(
+    query_text TEXT,
+    match_count INT DEFAULT 10,
+    search_table TEXT DEFAULT 'brdr_documents_data'
+)
+RETURNS TABLE(
+    id UUID,
+    doc_id VARCHAR,
+    content TEXT,
+    keywords TEXT[],
+    matched_keywords TEXT[],
+    match_score FLOAT8,
+    metadata JSONB
+) AS $$
+DECLARE
+    search_keywords TEXT[];
+    search_word TEXT;
+BEGIN
+    -- Extract keywords from the query
+    -- Split the query into words
+    search_keywords := ARRAY(
+        SELECT DISTINCT lower(word)
+        FROM regexp_split_to_table(query_text, '\s+') AS word
+        WHERE length(word) > 3 -- Only consider words longer than 3 characters
+    );
+    
+    IF search_table = 'brdr_documents_data' THEN
+        RETURN QUERY
+        WITH keyword_matches AS (
+            SELECT 
+                bdd.id,
+                bdd.doc_id,
+                bdd.content,
+                bdd.keywords,
+                ARRAY(
+                    SELECT k
+                    FROM unnest(bdd.keywords) k
+                    WHERE EXISTS (
+                        SELECT 1 
+                        FROM unnest(search_keywords) q
+                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
+                    )
+                ) AS matched_keywords,
+                (
+                    -- Calculate match score based on:
+                    -- 1. Number of keywords matched
+                    -- 2. Exact vs partial matches
+                    SELECT COALESCE(SUM(
+                        CASE
+                            -- Exact match gets higher score
+                            WHEN EXISTS (
+                                SELECT 1 
+                                FROM unnest(search_keywords) q
+                                WHERE k = q
+                            ) THEN 1.0::FLOAT8
+                            -- Partial match gets lower score
+                            ELSE 0.5::FLOAT8
+                        END
+                    ), 0.0::FLOAT8)::FLOAT8
+                    FROM unnest(bdd.keywords) k
+                    WHERE EXISTS (
+                        SELECT 1 
+                        FROM unnest(search_keywords) q
+                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
+                    )
+                ) AS match_score,
+                bdd.metadata
+            FROM brdr_documents_data bdd
+            WHERE bdd.keywords IS NOT NULL
+        )
+        SELECT 
+            km.id,
+            km.doc_id,
+            km.content,
+            km.keywords,
+            km.matched_keywords,
+            km.match_score,
+            km.metadata
+        FROM keyword_matches km
+        WHERE array_length(km.matched_keywords, 1) > 0
+        ORDER BY km.match_score DESC
+        LIMIT match_count;
+    ELSE
+        -- For documents table
+        RETURN QUERY
+        WITH keyword_matches AS (
+            SELECT 
+                bd.id,
+                bd.doc_id,
+                bd.content,
+                bd.keywords,
+                ARRAY(
+                    SELECT k
+                    FROM unnest(bd.keywords) k
+                    WHERE EXISTS (
+                        SELECT 1 
+                        FROM unnest(search_keywords) q
+                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
+                    )
+                ) AS matched_keywords,
+                (
+                    SELECT COALESCE(SUM(
+                        CASE
+                            WHEN EXISTS (
+                                SELECT 1 
+                                FROM unnest(search_keywords) q
+                                WHERE k = q
+                            ) THEN 1.0
+                            ELSE 0.5
+                        END
+                    ), 0.0)
+                    FROM unnest(bd.keywords) k
+                    WHERE EXISTS (
+                        SELECT 1 
+                        FROM unnest(search_keywords) q
+                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
+                    )
+                ) AS match_score,
+                bd.metadata
+            FROM brdr_documents bd
+            WHERE bd.keywords IS NOT NULL
+        )
+        SELECT 
+            km.id,
+            km.doc_id,
+            km.content,
+            km.keywords,
+            km.matched_keywords,
+            km.match_score,
+            km.metadata
+        FROM keyword_matches km
+        WHERE array_length(km.matched_keywords, 1) > 0
+        ORDER BY km.match_score DESC
+        LIMIT match_count;
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to combine keyword search with vector search for hybrid results
 CREATE OR REPLACE FUNCTION hybrid_search(
     query_text TEXT,
-    query_embedding VECTOR(384),
-    similarity_threshold FLOAT DEFAULT 0.7,
+    query_embedding VECTOR(1536),
+    keyword_weight FLOAT8 DEFAULT 0.4,
+    vector_weight FLOAT8 DEFAULT 0.6,
     match_count INT DEFAULT 10
 )
 RETURNS TABLE(
     id UUID,
     doc_id VARCHAR,
     content TEXT,
-    similarity FLOAT,
-    text_match_score FLOAT,
-    combined_score FLOAT,
+    keywords TEXT[],
+    matched_keywords TEXT[],
+    keyword_score FLOAT8,
+    vector_score FLOAT8,
+    combined_score FLOAT8,
     metadata JSONB
 ) AS $$
 BEGIN
     RETURN QUERY
-    WITH vector_search AS (
+    WITH 
+    keyword_results AS (
         SELECT 
-            bdd.id,
-            bdd.doc_id,
-            bdd.content,
-            1 - (bdd.embedding <-> query_embedding) AS vec_similarity,
-            bdd.metadata
-        FROM brdr_documents_data bdd
-        WHERE bdd.embedding IS NOT NULL
-        AND 1 - (bdd.embedding <-> query_embedding) > similarity_threshold
+            id,
+            doc_id,
+            content,
+            keywords,
+            matched_keywords,
+            match_score AS keyword_score,
+            metadata
+        FROM keyword_search(query_text, match_count * 2)
     ),
-    text_search AS (
+    vector_results AS (
         SELECT 
-            bdd.id,
-            bdd.doc_id,
-            bdd.content,
-            ts_rank(to_tsvector('english', bdd.content), plainto_tsquery('english', query_text)) AS text_score,
-            bdd.metadata
-        FROM brdr_documents_data bdd
-        WHERE to_tsvector('english', bdd.content) @@ plainto_tsquery('english', query_text)
+            id,
+            doc_id,
+            content,
+            similarity AS vector_score,
+            metadata
+        FROM vector_search(query_embedding, 0.3, match_count * 2)
+    ),
+    combined_results AS (
+        -- Results from keyword search
+        SELECT
+            kr.id,
+            kr.doc_id,
+            kr.content,
+            kr.keywords,
+            kr.matched_keywords,
+            kr.keyword_score::FLOAT8,
+            COALESCE(vr.vector_score, 0.0::FLOAT8)::FLOAT8 AS vector_score,
+            (kr.keyword_score::FLOAT8 * keyword_weight::FLOAT8 + COALESCE(vr.vector_score, 0.0::FLOAT8)::FLOAT8 * vector_weight::FLOAT8)::FLOAT8 AS combined_score,
+            kr.metadata
+        FROM keyword_results kr
+        LEFT JOIN vector_results vr ON kr.id = vr.id
+        
+        UNION
+        
+        -- Results from vector search that weren't in keyword results
+        SELECT
+            vr.id,
+            vr.doc_id,
+            vr.content,
+            ARRAY[]::TEXT[] AS keywords,
+            ARRAY[]::TEXT[] AS matched_keywords,
+            0.0::FLOAT8 AS keyword_score,
+            vr.vector_score::FLOAT8,
+            (vr.vector_score::FLOAT8 * vector_weight::FLOAT8)::FLOAT8 AS combined_score,
+            vr.metadata
+        FROM vector_results vr
+        WHERE NOT EXISTS (
+            SELECT 1 FROM keyword_results kr WHERE kr.id = vr.id
+        )
     )
-    SELECT 
-        COALESCE(vs.id, ts.id) AS id,
-        COALESCE(vs.doc_id, ts.doc_id) AS doc_id,
-        COALESCE(vs.content, ts.content) AS content,
-        COALESCE(vs.vec_similarity, 0.0) AS similarity,
-        COALESCE(ts.text_score, 0.0) AS text_match_score,
-        (COALESCE(vs.vec_similarity, 0.0) * 0.7 + COALESCE(ts.text_score, 0.0) * 0.3) AS combined_score,
-        COALESCE(vs.metadata, ts.metadata) AS metadata
-    FROM vector_search vs
-    FULL OUTER JOIN text_search ts ON vs.id = ts.id
+    SELECT * FROM combined_results
     ORDER BY combined_score DESC
     LIMIT match_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Grant execute permissions on functions
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
+-- Grant execute permissions
+GRANT EXECUTE ON FUNCTION keyword_search TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION hybrid_search TO anon, authenticated;
 
 -- Create vector indexes (only after you have data)
 -- Uncomment these lines after running ETL pipeline:
--- CREATE INDEX IF NOT EXISTS idx_brdr_documents_embedding ON brdr_documents USING hnsw (embedding vector_l2_ops);
--- CREATE INDEX IF NOT EXISTS idx_brdr_documents_data_embedding ON brdr_documents_data USING hnsw (embedding vector_l2_ops);
+CREATE INDEX IF NOT EXISTS idx_brdr_documents_embedding ON brdr_documents USING hnsw (embedding vector_l2_ops);
+CREATE INDEX IF NOT EXISTS idx_brdr_documents_data_embedding ON brdr_documents_data USING hnsw (embedding vector_l2_ops);
+
+-- Create GIN index on the keywords array for faster keyword searches
+CREATE INDEX IF NOT EXISTS idx_brdr_documents_data_keywords ON brdr_documents_data USING GIN (keywords);
+CREATE INDEX IF NOT EXISTS idx_brdr_documents_keywords ON brdr_documents USING GIN (keywords);

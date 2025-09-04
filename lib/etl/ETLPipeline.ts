@@ -583,6 +583,7 @@ export class ETLPipeline {
           chunk_id: chunk.pageNumber,
           content: chunk.cleanContent,
           embedding: chunk.embedding,
+          metadata: chunk.metadata,
           chunk_type: chunk.metadata.chunkType,
           keywords: chunk.metadata.keywords,
           related_chunks: [],

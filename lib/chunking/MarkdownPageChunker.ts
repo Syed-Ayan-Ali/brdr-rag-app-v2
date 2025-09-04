@@ -59,9 +59,6 @@ export interface FileMetadata {
   subject?: string;
   creator?: string;
   creationDate?: string;
-  creationYear?: string;
-  creationMonth?: string;
-  creationDay?: string;
 }
 
 export class MarkdownPageChunker {
@@ -99,19 +96,20 @@ export class MarkdownPageChunker {
       // console.debug(`Parsing markdown file: ${filename}`);
       
       const docId = this.extractDocIdFromFilename(filename);
+      const {year: creationYear, month: creationMonth, day: creationDay} = this.extractCreationDateFromFilename(filename);
       const metadata = this.extractMetadata(content);
       const pages = this.extractPages(content, docId);
       
-      return {
+      return {  
         docId,
         title: metadata.title || metadata.subject || `Document ${docId}`,
         author: metadata.author,
         subject: metadata.subject,
         creator: metadata.creator,
         creationDate: metadata.creationDate,
-        creationYear: metadata.creationYear,
-        creationMonth: metadata.creationMonth,
-        creationDay: metadata.creationDay,
+        creationYear: creationYear,
+        creationMonth: creationMonth,
+        creationDay: creationDay,
         pages,
         fullContent: content,
         filename
@@ -147,12 +145,12 @@ export class MarkdownPageChunker {
         subject: document.subject,
         creator: document.creator,
         creationDate: document.creationDate,
-        creationYear: document['creationYear'],
-        creationMonth: document['creationMonth'],
-        creationDay: document['creationDay'],
+        creationYear: document.creationYear,
+        creationMonth: document.creationMonth,
+        creationDay: document.creationDay,
         filename: document.filename,
         totalPages: document.pages.length,
-        source: 'BRDR_MARKDOWN'
+        source: 'BRDR'
       }
     };
   }
@@ -191,6 +189,13 @@ export class MarkdownPageChunker {
     return filename.replace('.md', '');
   }
 
+  private extractCreationDateFromFilename(filename: string): { year: string, month: string, day: string } {
+    const year = filename.substring(0, 4);
+    const month = filename.substring(4, 6);
+    const day = filename.substring(6, 8);
+    return { year, month, day };
+  }
+
   /**
    * Extract metadata from the document header
    * and parse creation date components
@@ -223,38 +228,7 @@ export class MarkdownPageChunker {
         metadata.creator = creatorMatch[1].trim();
       }
       
-      const creationDateMatch = line.match(/\*\*Creation Date:\*\*\s*(.+)/);
-      if (creationDateMatch) {
-        metadata.creationDate = creationDateMatch[1].trim();
-        
-        // Try to parse the creation date
-        // Expected format: D:20161118140742+08'00' (PDF format) or other standard date format
-        try {
-          let dateStr = creationDateMatch[1].trim();
-          
-          // Handle PDF date format: D:20161118140742+08'00'
-          if (dateStr.startsWith('D:')) {
-            // Extract YYYYMMDD from D:YYYYMMDDhhmmss+zz'zz'
-            const pdfDateMatch = dateStr.match(/D:(\d{4})(\d{2})(\d{2})(\d{6})?([+-]\d{2}'\d{2}')?/);
-            if (pdfDateMatch) {
-              const [, year, month, day] = pdfDateMatch;
-              metadata['creationYear'] = year;
-              metadata['creationMonth'] = month;
-              metadata['creationDay'] = day;
-            }
-          } else {
-            // Try to parse as standard date format
-            const date = new Date(dateStr);
-            if (!isNaN(date.getTime())) {
-              metadata['creationYear'] = date.getFullYear().toString();
-              metadata['creationMonth'] = (date.getMonth() + 1).toString().padStart(2, '0');
-              metadata['creationDay'] = date.getDate().toString().padStart(2, '0');
-            }
-          }
-        } catch (error) {
-          // console.error(`Failed to parse creation date: ${metadata.creationDate}`, error);
-        }
-      }
+     
     }
     
     return metadata;

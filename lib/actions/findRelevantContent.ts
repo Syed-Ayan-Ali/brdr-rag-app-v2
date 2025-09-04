@@ -19,7 +19,7 @@ export const findRelevantContent = async (userQuery: string, limit: number) => {
     
     console.log("Query Embedding done");
 
-    const similarityThreshold = 0.01;
+    const similarityThreshold = 0.3;
 
     // step 2: do vector search
     const vectorResults = await supabaseService.vectorSearch(
@@ -30,7 +30,7 @@ export const findRelevantContent = async (userQuery: string, limit: number) => {
     );
 
     // step 3: do keyword search
-    const keywordResults = await supabaseService.keyWordSearch(
+    const keywordResults = await supabaseService.keywordSearch(
       userQuery, {
         match_count: limit
       }
