@@ -13,9 +13,10 @@ interface PDFViewerProps {
   documents: PDFDocument[];
   isOpen: boolean;
   onClose: () => void;
+  activeMessageId?: string | null;
 }
 
-export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps) {
+export default function PDFViewer({ documents, isOpen, onClose, activeMessageId }: PDFViewerProps) {
   const [activeTab, setActiveTab] = useState(0);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -50,10 +51,17 @@ export default function PDFViewer({ documents, isOpen, onClose }: PDFViewerProps
   }, []);
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-white shadow-2xl z-50 flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-        <h3 className="text-lg font-semibold text-gray-800">PDF Viewer <span className="text-sm font-normal text-gray-500">({uniqueDocuments.length} document{uniqueDocuments.length !== 1 ? 's' : ''})</span></h3>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800">PDF Viewer <span className="text-sm font-normal text-gray-500">({uniqueDocuments.length} document{uniqueDocuments.length !== 1 ? 's' : ''})</span></h3>
+          {activeMessageId && (
+            <div className="text-xs text-gray-500 mt-1">
+              From message: {activeMessageId.substring(0, 8)}...
+            </div>
+          )}
+        </div>
         <button
           onClick={onClose}
           className="p-2 hover:bg-gray-200 rounded-lg transition-colors"

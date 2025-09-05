@@ -167,7 +167,8 @@ export class SupabaseService {
 
         console.log("vector search data is", data);
 
-        if (data === null) {
+        if (data === null || data.length === 0) {
+            console.log("vector search data is null");
             return null;
         } else{
                 // Map the results to match the expected SearchResult format
@@ -215,7 +216,8 @@ export class SupabaseService {
           return null;
         }
 
-        if (data === null) {
+        if (data === null || data.length === 0) {
+          console.log("keyword search data is null");
           return null;
         } else {
           // Map the results to match the expected SearchResult format
@@ -270,7 +272,8 @@ export class SupabaseService {
           return null;
         }
 
-        if (data === null) {
+        if (data === null || data.length === 0) {
+          console.log("hybrid search data is null");
           return null;
         } else {
           // Map the results to match the expected SearchResult format

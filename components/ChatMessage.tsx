@@ -1,13 +1,14 @@
 'use client';
 
 import { UIMessage } from 'ai';
-import { useState } from 'react';
-import PDFViewer from './PDFViewer';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm'
 
 interface ChatMessageProps {
   message: UIMessage;
   isLast: boolean;
   onClarificationSelect?: (option: string) => void;
+  onDocumentClick: (doc_id: string, pageNumber: number, chunkText: string, messageId?: string) => void;
 }
 
 interface VectorSearchResult {
@@ -23,11 +24,9 @@ interface VectorSearchResult {
   };
 }
 
-export default function ChatMessage({ message,  isLast, onClarificationSelect }: ChatMessageProps) {
+export default function ChatMessage({ message, isLast, onClarificationSelect, onDocumentClick }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
-  const [isPDFViewerOpen, setIsPDFViewerOpen] = useState(false);
-  const [pdfDocuments, setPdfDocuments] = useState<{ doc_id: string; pageNumber: number; chunkText: string; url: string }[]>([]);
 
   const handleClarificationClick = (option: string) => {
     if (onClarificationSelect) {
@@ -35,43 +34,9 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
     }
   };
 
-  const handleDocumentClick = (doc_id: string, pageNumber: number, chunkText: string) => {
-    console.log('handleDocumentClick called with:', { doc_id, pageNumber, chunkText: chunkText?.substring(0, 50) });
-    
-    if (!doc_id || doc_id === 'undefined') {
-      console.error('Invalid doc_id:', doc_id);
-      return;
-    }
-    
-    const url = `https://brdr.hkma.gov.hk/eng/doc-ldg/docId/getPdf/${doc_id}/${doc_id}.pdf`;
-    console.log("Generated PDF URL:", url);
-    
-    const newDoc = {
-      doc_id,
-      pageNumber, 
-      chunkText,
-      url
-    };
-    
-    // Add or update document in the list 
-    setPdfDocuments(prev => {
-      const existing = prev.find(doc => doc.doc_id === doc_id && doc.pageNumber === pageNumber);
-      if (existing) {
-        // Update existing document with same doc_id and page number
-        return prev.map(doc => (doc.doc_id === doc_id && doc.pageNumber === pageNumber) ? newDoc : doc);
-      } else {
-        // Add new document
-        const updated = [...prev, newDoc];
-        return updated;
-      }
-    });
-    
-    setIsPDFViewerOpen(true);
-  };
-
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${isLast ? 'animate-slide-in-right' : ''}`}>
-      <div className={`max-w-[80%] lg:max-w-[70%] xl:max-w-[60%] ${isUser ? 'order-2' : 'order-1'}`}>
+      <div className={`max-w-8xl lg:max-w-6xl xl:max-w-4xl ${isUser ? 'order-2' : 'order-1'}`}>
         {/* Avatar */}
         <div className={`flex items-center mb-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 ${
@@ -115,7 +80,8 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
               case 'text':
                 return (
                   <div key={index} className="whitespace-pre-wrap leading-relaxed">
-                    {part.text}
+                    <Markdown remarkPlugins={[remarkGfm]}>{part.text}</Markdown>
+                    {/* {part.text} */} 
                   </div>
                 );
 
@@ -165,7 +131,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
             
               case 'tool-find_relevant_brdr_document_data': {
                 const callId = part.toolCallId;
-                console.log("Tool called: find_relevant_brdr_document_data with callId", callId)
+                // console.log("Tool called: find_relevant_brdr_document_data with callId", callId)
 
                 switch (part.state) {
                   case 'input-streaming':
@@ -186,6 +152,7 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                     );
                   case 'output-available':
                     const output = part.output as VectorSearchResult[];
+                    // console.log("output is", output);
                     return (
                       <div key={callId} className="space-y-3">
                         {/* the case of null return value*/}
@@ -222,10 +189,11 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                                       onClick={() => {
                                         console.log('Clicking document:', chunk.doc_id, chunk.content.substring(0, 50));
                                         console.log('Metadata when clicking:', chunk.metadata);
-                                        handleDocumentClick(
+                                        onDocumentClick(
                                           chunk.doc_id, 
                                           chunk.metadata?.pageNumber || 1, 
-                                          chunk.content
+                                          chunk.content,
+                                          message.id
                                         );
                                       }}
                                       className="text-purple-600 hover:text-purple-800 hover:underline transition-colors font-medium text-sm flex items-center space-x-1"
@@ -290,10 +258,11 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
                                     onClick={() => {
                                       console.log('Quick access clicking document:', doc_id, data.chunk.metadata?.pageNumber, data.chunk.content.substring(0, 50));
                                       console.log('Quick access metadata:', data.chunk.metadata);
-                                      handleDocumentClick(
+                                      onDocumentClick(
                                         doc_id, 
                                         data.chunk.metadata?.pageNumber || 1, 
-                                        data.chunk.content || ''
+                                        data.chunk.content || '',
+                                        message.id
                                       );
                                     }}
                                     className="text-left p-2 bg-white rounded border border-indigo-200 hover:bg-indigo-50 transition-colors"
@@ -505,13 +474,6 @@ export default function ChatMessage({ message,  isLast, onClarificationSelect }:
           )}
         </div>
       </div>
-      
-      {/* PDF Viewer Sidebar */}
-      <PDFViewer
-        documents={pdfDocuments}
-        isOpen={isPDFViewerOpen}
-        onClose={() => setIsPDFViewerOpen(false)}
-      />
     </div>
   );
 } 

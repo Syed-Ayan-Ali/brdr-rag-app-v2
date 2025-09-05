@@ -37,7 +37,8 @@ export const findRelevantContent = async (userQuery: string, limit: number) => {
     );
 
     // Step 4: Combine and process results
-    if (vectorResults === null && keywordResults === null) {
+    if (vectorResults === null && keywordResults === null
+    ) {
       // logger.warn(LogCategory.SEARCH, 'No results found from any search method');
       return null;
     }
