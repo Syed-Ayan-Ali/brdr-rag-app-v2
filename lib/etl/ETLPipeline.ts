@@ -77,6 +77,7 @@ export class ETLPipeline {
       // Test database connection first
       const isConnected = await this.supabaseServiceInstance.testConnection();
       if (!isConnected) {
+        console.log("Database connection failed")
         throw new Error('Database connection failed');
       }
 

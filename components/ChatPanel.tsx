@@ -10,6 +10,7 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import ChatMessage from './ChatMessage';
 import SearchBar from './SearchBar';
+import TestConnectionButton from './TestConnectionButton';
 // import { AuditTrailManager } from '@/lib/utils/AuditTrail';
 
 export default function ChatPanel() {
@@ -195,6 +196,12 @@ export default function ChatPanel() {
             onSendMessage={handleSendMessage} 
             isDisabled={isAssistantResponding}
           />
+        </div>
+      </div>
+
+      <div className="text-xs text-slate-500 text-center">
+        <div className="flex justify-center">
+          <TestConnectionButton />
         </div>
       </div>
 
