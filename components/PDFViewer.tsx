@@ -31,7 +31,7 @@ export default function PDFViewer({ documents, isOpen, onClose, activeMessageId 
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 xl:w-2/5 bg-white shadow-2xl z-50 flex flex-col">
+    <div className="fixed inset-y-0 right-0 w-full bg-white shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
         <h3 className="text-lg font-semibold text-gray-800">PDF Viewer</h3>
