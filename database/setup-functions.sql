@@ -43,12 +43,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function for vector similarity search
-CREATE OR REPLACE FUNCTION vector_search(
-    query_embedding VECTOR(1536),
-    similarity_threshold FLOAT DEFAULT 0.3,
+
+
+
+-- Function for full text search with date filtering
+CREATE OR REPLACE FUNCTION full_text_search(
+    query_text TEXT,
     match_count INT DEFAULT 10,
-    search_table TEXT DEFAULT 'brdr_documents_data'
+    search_table TEXT DEFAULT 'brdr_documents_data',
+    start_year INT DEFAULT 1989,
+    start_month INT DEFAULT 1,
+    start_day INT DEFAULT 1,
+    end_year INT DEFAULT EXTRACT(YEAR FROM CURRENT_DATE)::INT,
+    end_month INT DEFAULT EXTRACT(MONTH FROM CURRENT_DATE)::INT,
+    end_day INT DEFAULT EXTRACT(DAY FROM CURRENT_DATE)::INT
 )
 RETURNS TABLE(
     id UUID,
@@ -58,41 +66,69 @@ RETURNS TABLE(
     metadata JSONB
 ) AS $$
 BEGIN
-    IF search_table = 'brdr_documents_data' THEN
-        RETURN QUERY
-        SELECT 
-            bdd.id,
-            bdd.doc_id,
-            bdd.content,
-            1 - (bdd.embedding <-> query_embedding) AS similarity,
-            bdd.metadata
-        FROM brdr_documents_data bdd
-        WHERE bdd.embedding IS NOT NULL
-        AND 1 - (bdd.embedding <-> query_embedding) > similarity_threshold
-        ORDER BY bdd.embedding <-> query_embedding
-        LIMIT match_count;
-    ELSE
-        RETURN QUERY
-        SELECT 
-            bd.id,
-            bd.doc_id,
-            bd.content,
-            1 - (bd.embedding <-> query_embedding) AS similarity,
-            bd.metadata
-        FROM brdr_documents bd
-        WHERE bd.embedding IS NOT NULL
-        AND 1 - (bd.embedding <-> query_embedding) > similarity_threshold
-        ORDER BY bd.embedding <-> query_embedding
-        LIMIT match_count;
-    END IF;
+    RETURN QUERY
+    SELECT 
+        bdd.id,
+        bdd.doc_id,
+        bdd.content,
+        0.0::FLOAT AS similarity,
+        bdd.metadata
+    FROM brdr_documents_data bdd
+    WHERE bdd.content ILIKE '%' || query_text || '%'
+    
+    LIMIT match_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function for keyword search in the keywords array column
+-- Function for vector similarity search with date range filtering
+CREATE OR REPLACE FUNCTION vector_search(
+    query_embedding VECTOR(1536),
+    similarity_threshold FLOAT DEFAULT 0.3,
+    match_count INT DEFAULT 10,
+    search_table TEXT DEFAULT 'brdr_documents_data',
+    start_year INT DEFAULT 1989,
+    start_month INT DEFAULT 1,
+    start_day INT DEFAULT 1,
+    end_year INT DEFAULT EXTRACT(YEAR FROM CURRENT_DATE)::INT,
+    end_month INT DEFAULT EXTRACT(MONTH FROM CURRENT_DATE)::INT,
+    end_day INT DEFAULT EXTRACT(DAY FROM CURRENT_DATE)::INT
+)
+RETURNS TABLE(
+    id UUID,
+    doc_id VARCHAR,
+    content TEXT,
+    similarity FLOAT,
+    metadata JSONB
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        bdd.id,
+        bdd.doc_id,
+        bdd.content,
+        1 - (bdd.embedding <-> query_embedding) AS similarity,
+        bdd.metadata
+    FROM brdr_documents_data bdd
+    WHERE bdd.embedding IS NOT NULL
+   
+    AND 1 - (bdd.embedding <-> query_embedding) > similarity_threshold
+    ORDER BY bdd.embedding <-> query_embedding
+    LIMIT match_count;
+    
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function for keyword search in the keywords array column with date filtering
 CREATE OR REPLACE FUNCTION keyword_search(
     query_text TEXT,
     match_count INT DEFAULT 10,
-    search_table TEXT DEFAULT 'brdr_documents_data'
+    search_table TEXT DEFAULT 'brdr_documents_data',
+    start_year INT DEFAULT 1989,
+    start_month INT DEFAULT 1,
+    start_day INT DEFAULT 1,
+    end_year INT DEFAULT EXTRACT(YEAR FROM CURRENT_DATE)::INT,
+    end_month INT DEFAULT EXTRACT(MONTH FROM CURRENT_DATE)::INT,
+    end_day INT DEFAULT EXTRACT(DAY FROM CURRENT_DATE)::INT
 )
 RETURNS TABLE(
     id UUID,
@@ -115,115 +151,58 @@ BEGIN
         WHERE length(word) > 3 -- Only consider words longer than 3 characters
     );
     
-    IF search_table = 'brdr_documents_data' THEN
-        RETURN QUERY
-        WITH keyword_matches AS (
-            SELECT 
-                bdd.id,
-                bdd.doc_id,
-                bdd.content,
-                bdd.keywords,
-                ARRAY(
-                    SELECT k
-                    FROM unnest(bdd.keywords) k
-                    WHERE EXISTS (
-                        SELECT 1 
-                        FROM unnest(search_keywords) q
-                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
-                    )
-                ) AS matched_keywords,
-                (
-                    -- Calculate match score based on:
-                    -- 1. Number of keywords matched
-                    -- 2. Exact vs partial matches
-                    SELECT COALESCE(SUM(
-                        CASE
-                            -- Exact match gets higher score
-                            WHEN EXISTS (
-                                SELECT 1 
-                                FROM unnest(search_keywords) q
-                                WHERE k = q
-                            ) THEN 1.0::FLOAT8
-                            -- Partial match gets lower score
-                            ELSE 0.5::FLOAT8
-                        END
-                    ), 0.0::FLOAT8)::FLOAT8
-                    FROM unnest(bdd.keywords) k
-                    WHERE EXISTS (
-                        SELECT 1 
-                        FROM unnest(search_keywords) q
-                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
-                    )
-                ) AS match_score,
-                bdd.metadata
-            FROM brdr_documents_data bdd
-            WHERE bdd.keywords IS NOT NULL
-        )
+    -- For documents table with date filtering
+    RETURN QUERY
+    WITH keyword_matches AS (
         SELECT 
-            km.id,
-            km.doc_id,
-            km.content,
-            km.keywords,
-            km.matched_keywords,
-            km.match_score,
-            km.metadata
-        FROM keyword_matches km
-        WHERE array_length(km.matched_keywords, 1) > 0
-        ORDER BY km.match_score DESC
-        LIMIT match_count;
-    ELSE
-        -- For documents table
-        RETURN QUERY
-        WITH keyword_matches AS (
-            SELECT 
-                bd.id,
-                bd.doc_id,
-                bd.content,
-                bd.keywords,
-                ARRAY(
-                    SELECT k
-                    FROM unnest(bd.keywords) k
-                    WHERE EXISTS (
-                        SELECT 1 
-                        FROM unnest(search_keywords) q
-                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
-                    )
-                ) AS matched_keywords,
-                (
-                    SELECT COALESCE(SUM(
-                        CASE
-                            WHEN EXISTS (
-                                SELECT 1 
-                                FROM unnest(search_keywords) q
-                                WHERE k = q
-                            ) THEN 1.0
-                            ELSE 0.5
-                        END
-                    ), 0.0)
-                    FROM unnest(bd.keywords) k
-                    WHERE EXISTS (
-                        SELECT 1 
-                        FROM unnest(search_keywords) q
-                        WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
-                    )
-                ) AS match_score,
-                bd.metadata
-            FROM brdr_documents bd
-            WHERE bd.keywords IS NOT NULL
-        )
-        SELECT 
-            km.id,
-            km.doc_id,
-            km.content,
-            km.keywords,
-            km.matched_keywords,
-            km.match_score,
-            km.metadata
-        FROM keyword_matches km
-        WHERE array_length(km.matched_keywords, 1) > 0
-        ORDER BY km.match_score DESC
-        LIMIT match_count;
-    END IF;
+            bdd.id,
+            bdd.doc_id,
+            bdd.content,
+            bdd.keywords,
+            ARRAY(
+                SELECT k
+                FROM unnest(bdd.keywords) k
+                WHERE EXISTS (
+                    SELECT 1 
+                    FROM unnest(search_keywords) q
+                    WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
+                )
+            ) AS matched_keywords,
+            (
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1 
+                            FROM unnest(search_keywords) q
+                            WHERE k = q
+                        ) THEN 1.0::FLOAT8
+                        ELSE 0.5::FLOAT8
+                    END
+                ), 0.0::FLOAT8)::FLOAT8
+                FROM unnest(bdd.keywords) k
+                WHERE EXISTS (
+                    SELECT 1 
+                    FROM unnest(search_keywords) q
+                    WHERE k ILIKE '%' || q || '%' OR q ILIKE '%' || k || '%'
+                )
+            ) AS match_score,
+            bdd.metadata
+        FROM brdr_documents_data bdd
+        WHERE bdd.keywords IS NOT NULL
+       
+    )
+    SELECT 
+        km.id,
+        km.doc_id,
+        km.content,
+        km.keywords,
+        km.matched_keywords,
+        km.match_score,
+        km.metadata
+    FROM keyword_matches km
+    WHERE array_length(km.matched_keywords, 1) > 0
+    ORDER BY km.match_score DESC
+    LIMIT match_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -233,7 +212,13 @@ CREATE OR REPLACE FUNCTION hybrid_search(
     query_embedding VECTOR(1536),
     keyword_weight FLOAT8 DEFAULT 0.4,
     vector_weight FLOAT8 DEFAULT 0.6,
-    match_count INT DEFAULT 10
+    match_count INT DEFAULT 10,
+    start_year INT DEFAULT 1989,
+    start_month INT DEFAULT 1,
+    start_day INT DEFAULT 1,
+    end_year INT DEFAULT EXTRACT(YEAR FROM CURRENT_DATE)::INT,
+    end_month INT DEFAULT EXTRACT(MONTH FROM CURRENT_DATE)::INT,
+    end_day INT DEFAULT EXTRACT(DAY FROM CURRENT_DATE)::INT
 )
 RETURNS TABLE(
     id UUID,
@@ -258,7 +243,17 @@ BEGIN
             matched_keywords,
             match_score AS keyword_score,
             metadata
-        FROM keyword_search(query_text, match_count * 2)
+        FROM keyword_search(
+            query_text, 
+            match_count * 2,
+            'brdr_documents_data',
+            start_year,
+            start_month,
+            start_day,
+            end_year,
+            end_month,
+            end_day
+        )
     ),
     vector_results AS (
         SELECT 
@@ -267,7 +262,18 @@ BEGIN
             content,
             similarity AS vector_score,
             metadata
-        FROM vector_search(query_embedding, 0.3, match_count * 2)
+        FROM vector_search(
+            query_embedding, 
+            0.3, 
+            match_count * 2, 
+            'brdr_documents_data',
+            start_year,
+            start_month,
+            start_day,
+            end_year,
+            end_month,
+            end_day
+        )
     ),
     combined_results AS (
         -- Results from keyword search
@@ -311,6 +317,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Grant execute permissions
 GRANT EXECUTE ON FUNCTION keyword_search TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION hybrid_search TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION vector_search TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION full_text_search TO anon, authenticated;
 
 -- Create vector indexes (only after you have data)
 -- Uncomment these lines after running ETL pipeline:

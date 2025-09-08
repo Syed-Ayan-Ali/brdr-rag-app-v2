@@ -183,7 +183,7 @@ export default function ChatMessage({ message, isLast, onClarificationSelect, on
                             <div className="font-semibold text-purple-800 mb-2">Source Document Chunks</div>
                             <div className="space-y-2 max-h-96 overflow-y-auto">
                               {output.map((chunk: VectorSearchResult, idx: number) => (
-                                <div key={chunk.id} className="bg-white p-3 rounded border border-purple-200">
+                                <div key={`${chunk.id}-${idx}`} className="bg-white p-3 rounded border border-purple-200">
                                   <div className="flex items-start justify-between mb-2">
                                     <button
                                       onClick={() => {
@@ -219,7 +219,7 @@ export default function ChatMessage({ message, isLast, onClarificationSelect, on
                                       <span className="font-medium text-red-500">No metadata available</span>
                                     )}
                                     {/* Debug metadata */}
-                                    {(() => { console.log('Chunk metadata:', chunk.metadata); return null; })()}
+                                    {/* {(() => { console.log('Chunk metadata:', chunk.metadata); return null; })()} */}
                                   </div>
                                   
                                   <div className="text-xs bg-gray-50 p-2 rounded border">

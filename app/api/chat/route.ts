@@ -47,9 +47,11 @@ const tools = {
     inputSchema: z.object({
       question: z.string().describe('the users query to find the relevant chunks'),
       limit: z.number().optional().default(10).describe('the number of chunks to return'),
+      search_table: z.string().default('brdr_documents_data').describe('the table to search in'),
+      similarity_threshold: z.number().optional().default(0.1).describe('the similarity threshold to use for the semantic similarity'),
     }),
-    execute: async ({ question, limit }) => {
-      const result = await findRelevantContent(question, limit);
+    execute: async ({ question, limit, search_table, similarity_threshold }) => {
+      const result = await findRelevantContent(question, limit, search_table, similarity_threshold);
       console.log("result from find_relevant_brdr_document_data is", result);
       // Check if the result is an error object
       return result;

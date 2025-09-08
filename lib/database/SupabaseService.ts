@@ -96,9 +96,15 @@ export interface AdvancedSearchResult {
 export interface SearchOptions {
   similarity_threshold?: number;
   match_count?: number;
-  search_table?: 'brdr_documents' | 'brdr_documents_data';
+  search_table?: string;
   keyword_weight?: number;
   vector_weight?: number;
+  start_year?: number;
+  start_month?: number;
+  start_day?: number;
+  end_year?: number;
+  end_month?: number;
+  end_day?: number;
 }
 
 export interface AdvancedSearchOptions {
@@ -142,28 +148,91 @@ export class SupabaseService {
 
   // Search Methods
   
-  async vectorSearch(
-    queryEmbedding: number[],
+  /**
+   * Search for documents using full text search
+   */
+  async fullTextSearch(
+    queryText: string,
     options: SearchOptions = {}
   ): Promise<SearchResult[] | null | undefined> {
     const {
-      similarity_threshold = 0.3,
       match_count = 10,
       search_table = 'brdr_documents_data'
     } = options;
 
     try {
-        console.log("query embedding is", queryEmbedding.slice(0, 10));
+      console.log("full text search query:", queryText);
+      console.log("full text search options:", options);
+
+      const { data, error } = await this.supabase.rpc('full_text_search', {
+        query_text: queryText,
+        match_count,
+        search_table
+      });
+
+      console.log("full text search data:", data);
+
+      if (error) {
+        console.error("Full text search error:", error);
+        return null;
+      }
+
+      if (data === null || data.length === 0) {
+        console.log("full text search data is null");
+        return null;
+      } else {
+        return data.map((item: SearchResult) => ({
+          id: item.id,
+          doc_id: item.doc_id,
+          content: item.content,
+          similarity: item.similarity,
+          metadata: item.metadata
+        }));
+
+      }
+    } catch (rpcError) {
+      console.log('Full text search RPC function not available.');
+      return null;
+    }
+  }
+
+
+  async vectorSearch(
+    queryEmbedding: number[],
+    options: SearchOptions = {}
+  ): Promise<SearchResult[] | null | undefined> {
+    const {
+      similarity_threshold,
+      match_count,
+      search_table,
+      start_year,
+      start_month,
+      start_day,
+      end_year,
+      end_month,
+      end_day 
+    } = options;
+
+    try {
+        console.dir("query embedding is", queryEmbedding);
         console.log("vector search options are", options);
         const { data, error } = await this.supabase.rpc('vector_search', {
           search_table: search_table,
           query_embedding: queryEmbedding,
           similarity_threshold: similarity_threshold,
+          start_year: start_year,
+          start_month: start_month,
+          start_day: start_day,
+          end_year: end_year,
+          end_month: end_month,
+          end_day: end_day,
           match_count
         });
 
         // const data = null;
         // const error = "error";
+
+
 
         console.log("vector search data is", data);
 
@@ -209,7 +278,7 @@ export class SupabaseService {
           search_table
         });
 
-        console.log("keyword search data:", data);
+        // console.log("keyword search data:", data);
 
         if (error) {
           console.error("Keyword search error:", error);
