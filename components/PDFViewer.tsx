@@ -13,7 +13,7 @@ interface PDFViewerProps {
   documents: PDFDocument[];
   isOpen: boolean;
   onClose: () => void;
-  activeMessageId: string;
+  activeMessageId: string | null;
 }
 
 export default function PDFViewer({ documents, isOpen, onClose, activeMessageId }: PDFViewerProps) {
